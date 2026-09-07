@@ -65,10 +65,6 @@ REPLY_STYLE = "auto"
 # 原生 Markdown 消息（msg_type=2）可用的 QQ 官方平台名（AstrBot 内置适配器）
 QQ_OFFICIAL_PLATFORM_NAMES = ("qq_official", "qq_official_webhook")
 
-# 来源说明（回复底部）
-SOURCE_NOTE = "数据来自偶游盒子战绩查询（wot.ouj.com），非官方数据，仅供参考"
-
-
 class WotQueryError(Exception):
     """网络层异常：超时 / 非 200 / 站点不可达"""
 

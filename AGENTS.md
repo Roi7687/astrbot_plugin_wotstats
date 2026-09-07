@@ -1,7 +1,7 @@
 # astrbot_plugin_wotstats 开发文档
 
 > **插件名称**：坦克世界战绩查询（WoT Stats Query）
-> **版本**：v0.1.0（已完成首版编码与单测；待 AstrBot 实机联调）
+> **版本**：v0.1.1（首版编码 + 回复排版迭代完成；待 AstrBot 实机联调）
 > **作者**：Roi
 > **许可证**：（待定，建议参考同类插件使用 AGPL-3.0）
 > **仓库地址**：https://github.com/Roi7687/astrbot_plugin_wotstats
@@ -93,6 +93,8 @@ astrbot_plugin_wotstats/
 | `table` | 支持 GFM 表格的渠道/本地预览 | 标准 Markdown 表格（含转义 `|`→`｜`） |
 | `plain`（默认，其他平台） | 其他聊天平台 | 无 Markdown 标记的纯文本 |
 
+回复内容（v0.1.1）：常用坦克行含 **场均伤害/命中率**；盒子评价**完整多条**逐行展示；新增**各车型近 1000 场单车战斗力**（0 值显示"暂无"）；结尾"数据来源："为**可点击直达查询页**的链接（qq_md/table 为 `[url](url)`，plain 输出裸 URL）。
+
 - 平台选择：`REPLY_STYLE=auto`（config）→ 平台名含 `qq_official` 用 qq_md，否则 plain；`REPLY_STYLE` 可强制 table/qq_md/plain。
 - AstrBot 侧机制：`event.make_result().message(text).use_markdown(True)`；qqofficial 适配器将
   use_markdown_ 非 False 的消息链按 msg_type=2 + markdown.content 发送，出错自动回退 content 模式。
@@ -114,6 +116,7 @@ astrbot_plugin_wotstats/
 | tanks[] | `.use-tank-list` li[tank] 顺序 + `.user-tank__pop[tank]` 弹层（名称/类型/胜率/场次/战力/场均 5 项） |
 | evaluation[] | `.comment-list__text p` |
 | recent_battles[] | `.userRecord-recent__box` ul>li（胜负/经验/模式/时间/坦克图） |
+| class_power | 页面底部脚本 `App.init([Math.min(2000,v),...])` 五值，与 userRecord.js 蜘蛛图顺序 TD/HT/MT/SPG/LT 一一对应 |
 | tabs | `.mod-tabs-trigger` a |
 
 ### 5.2 总战绩页 r=default/battlestat → TotalStats
@@ -160,6 +163,16 @@ astrbot_plugin_wotstats/
 ---
 
 ## 八、进度
+
+### ✅ v0.1.1 已完成（2026-09-08）
+
+| 项 | 说明 |
+|----|------|
+| 常用坦克补场均伤害/命中率 | ✅ 三风格同步更新 |
+| 盒子评价完整展示 | ✅ 逐条输出全部评价 |
+| 各车型近1000场单车战斗力 | ✅ 解析 App.init 五值并排版（TD/HT/MT/SPG/LT），0→暂无 |
+| 来源行改为可点击直达链接 | ✅ 删除旧免责文案；QQ markdown 用 [url](url)，纯文本输出裸 URL |
+| 单测 | ✅ 35/35 通过 |
 
 ### ✅ v0.1.0 已完成
 

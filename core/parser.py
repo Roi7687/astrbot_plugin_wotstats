@@ -26,6 +26,9 @@ __all__ = [
 
 # ───────────────────── 低层工具 ─────────────────────
 
+CLASS_ORDER = ("TD", "HT", "MT", "SPG", "LT")  # 与 userRecord.js 蜘蛛图 categories 一致
+
+
 _TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -148,6 +151,7 @@ class PlayerStats:
     evaluation: list = field(default_factory=list)      # 盒子评价文案
     recent_battles: list = field(default_factory=list)  # list[BattleBrief]
     tabs: list = field(default_factory=list)            # 页面标签 (text, href)
+    class_power: dict = field(default_factory=dict)     # 各车型近1000场单车战斗力 {TD/HT/MT/SPG/LT: 数值}
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -337,6 +341,23 @@ def _parse_index(html_text: str) -> PlayerStats:
         for am in re.finditer(r'<a href="([^"]+)"[^>]*>([^<]+)</a>', m.group(1)):
             st.tabs.append((_strip(am.group(2)), _strip(am.group(1))))
 
+    # 各车型近 1000 场单车战斗力
+    # 数据位于页面底部脚本：App.init([Math.min(2000, v), Math.min(2000, v), ...])，共 5 项，
+    # 与 userRecord.js 蜘蛛图 categories 顺序一一对应：TD/HT/MT/SPG/LT（y 轴上限 2000）。
+    # 用普通字符串定位 + 分段拆分（页面结构固定，避免正则转义脆弱）。
+    init_i = html_text.find("App.init([")
+    if init_i >= 0:
+        seg = html_text[init_i + len("App.init(["):]
+        seg = seg[: seg.find("]);")] if seg.find("]);") >= 0 else ""
+        nums = []
+        for part in seg.split("Math.min(")[1:]:
+            inner = part[: part.find(")")].replace(" ", "")
+            pair = inner.split(",")
+            if len(pair) >= 2 and pair[0] == "2000" and pair[1]:
+                nums.append(pair[1])
+        for i, key in enumerate(CLASS_ORDER):
+            if i < len(nums):
+                st.class_power[key] = nums[i]
     # 防御：核心数据一个都没解析到 → 大概率页面已改版/结构异常
     if not st.power and not st.tanks and not st.avg_per_battle:
         snippet = _strip(html_text)[:120]

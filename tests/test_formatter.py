@@ -11,6 +11,9 @@ from core.formatter import (format_index_reply, format_total_reply,
 from core.parser import (BattleBrief, PlayerStats, RecentStats, TankDetail,
                          TotalStats, TotalTankRow)
 
+INDEX_URL = "https://wotbox.ouj.com/wotbox/index.php?r=default/index&pn=loy1234"
+TOTAL_URL = "https://wotbox.ouj.com/wotbox/index.php?r=default/battlestat&pn=loy1234"
+
 
 def make_index_stats():
     st = PlayerStats(
@@ -24,10 +27,13 @@ def make_index_stats():
                         "占领": "0.11", "防守": "0.09", "发现": "1.29"},
         tanks=[TankDetail(key="k1", name="庇护者", vehicle_type="重坦",
                           win_rate="58%", battles="111", power="1767",
-                          avg={"场均伤害": "4196"})],
-        evaluation=["团队中坚力量，不可或缺", "使用频率最高的坦克是：庇护者"],
+                          avg={"场均伤害": "4196", "场均经验": "789",
+                               "场均击毁": "1.32", "场均银币": "39271", "命中率": "81%"})],
+        evaluation=["团队中坚力量，不可或缺", "你的输出已经接近大神水平了",
+                    "擅长重坦，游走于城市之间，队伍抗线支柱", "使用频率最高的坦克是：庇护者"],
         recent_battles=[BattleBrief(result="胜利", exp="691", mode="标准", time="09-07 22:00"),
                         BattleBrief(result="失败", exp="400", mode="标准", time="09-07 21:48")],
+        class_power={"TD": "1565", "HT": "1538", "MT": "1376", "SPG": "0", "LT": "1427"},
     )
     return st
 
@@ -48,29 +54,48 @@ class TestIndexStyles(unittest.TestCase):
     def setUp(self):
         self.st = make_index_stats()
 
-    def test_qq_md_uses_official_syntax(self):
+    def test_qq_md_tank_line_has_extra_fields(self):
         text = format_index_reply(self.st, "qq_md")
-        self.assertIn("**loy1234**", text)
-        self.assertIn("**57%**", text)
-        self.assertIn("- 胜率：", text)
-        self.assertNotIn("| --- |", text)  # QQ 官方 markdown 不支持表格
+        self.assertIn("**庇护者**（重坦）", text)
+        self.assertIn("场均伤害 4196", text)
+        self.assertIn("命中率 81%", text)
+
+    def test_qq_md_evaluation_full(self):
+        text = format_index_reply(self.st, "qq_md")
+        self.assertIn("📝 **盒子评价**", text)
+        for line in ("团队中坚力量，不可或缺", "你的输出已经接近大神水平了",
+                     "擅长重坦，游走于城市之间，队伍抗线支柱", "使用频率最高的坦克是：庇护者"):
+            self.assertIn("- " + line, text)
+
+    def test_qq_md_class_power(self):
+        text = format_index_reply(self.st, "qq_md")
+        self.assertIn("📊 **各车型近 1000 场单车战斗力**", text)
+        self.assertIn("- 坦克歼击车（TD）：1565", text)
+        self.assertIn("- 重坦（HT）：1538", text)
+        self.assertIn("- 中坦（MT）：1376", text)
+        self.assertIn("- 自行火炮（SPG）：暂无", text)
+        self.assertIn("- 轻坦（LT）：1427", text)
+
+    def test_qq_md_source_link_clickable(self):
+        text = format_index_reply(self.st, "qq_md")
+        self.assertNotIn("仅供参考", text)
+        self.assertIn("数据来源：[" + INDEX_URL + "](" + INDEX_URL + ")", text)
 
     def test_plain_has_no_markdown_markers(self):
         text = format_index_reply(self.st, "plain")
         self.assertNotIn("**", text)
         self.assertNotIn("| --- |", text)
         self.assertIn("胜率 57%", text)
-        self.assertIn("常用坦克：庇护者", text)
+        self.assertIn("数据来源：" + INDEX_URL, text)
+        self.assertIn("· 擅长重坦，游走于城市之间，队伍抗线支柱", text)
 
     def test_table_style(self):
         text = format_index_reply(self.st, "table")
         self.assertIn("| --- |", text)
         self.assertIn("| 胜率 |", text)
-        self.assertIn("| 庇护者 | 重坦 | 58% | 111 | 1767 |", text)
-
-    def test_source_note_present(self):
-        for style in ("qq_md", "plain", "table"):
-            self.assertIn("偶游盒子", format_index_reply(self.st, style))
+        self.assertIn("| 庇护者 | 重坦 | 58% | 111 | 1767 | 4196 | 81% |", text)
+        self.assertIn("### 各车型近 1000 场单车战斗力", text)
+        self.assertIn("| 重坦（HT） | 1538 |", text)
 
 
 class TestTotalStyles(unittest.TestCase):
@@ -83,11 +108,14 @@ class TestTotalStyles(unittest.TestCase):
         self.assertIn("**53%**", text)
         self.assertIn("已入伍4984天", text)
         self.assertNotIn("| --- |", text)
+        self.assertIn("数据来源：[" + TOTAL_URL + "](" + TOTAL_URL + ")", text)
+        self.assertNotIn("仅供参考", text)
 
     def test_plain(self):
         text = format_total_reply(self.ts, "plain")
         self.assertNotIn("**", text)
         self.assertIn("总胜率 53%", text)
+        self.assertIn("数据来源：" + TOTAL_URL, text)
 
     def test_table(self):
         text = format_total_reply(self.ts, "table")

@@ -59,8 +59,11 @@ class TestIndexParser(unittest.TestCase):
         self.assertEqual(first.win_rate, "58%")
         self.assertEqual(first.battles, "111")
         self.assertEqual(first.power, "1767")
+
         self.assertIn("场均伤害", first.avg)
         self.assertEqual(first.avg["场均伤害"], "4196")
+        self.assertIn("命中率", first.avg)
+        self.assertEqual(first.avg["命中率"], "81%")
 
     def test_evaluation_and_recent_battles(self):
         self.assertEqual(len(self.st.evaluation), 4)
@@ -76,6 +79,11 @@ class TestIndexParser(unittest.TestCase):
         labels = [t for t, _ in self.st.tabs]
         for expected in ("个人战绩", "车库", "战斗日志", "总战绩", "App日志"):
             self.assertIn(expected, labels)
+
+
+    def test_class_power(self):
+        expect = {"TD": "1565", "HT": "1538", "MT": "1376", "SPG": "0", "LT": "1427"}
+        self.assertEqual(self.st.class_power, expect)
 
     def test_to_dict_roundtrip(self):
         d = self.st.to_dict()

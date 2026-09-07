@@ -11,7 +11,9 @@
 
 所有函数为纯函数（输入数据模型，输出字符串），便于单元测试。
 """
-from .config import SOURCE_NOTE
+import urllib.parse
+
+from .config import ACT_INDEX, ACT_TOTAL, QUERY_ENDPOINT
 from .parser import PlayerStats, TotalStats
 
 __all__ = [
@@ -23,6 +25,15 @@ __all__ = [
 
 NL = chr(10)
 
+# 车型显示名（与页面蜘蛛图 categories 顺序一致，见 userRecord.js）
+CLASS_CN = {
+    "TD": "坦克歼击车",
+    "HT": "重坦",
+    "MT": "中坦",
+    "SPG": "自行火炮",
+    "LT": "轻坦",
+}
+
 
 def _md_escape(s: str) -> str:
     """GFM 表格单元格转义（表格风格仅用于支持表格的渠道）。"""
@@ -31,6 +42,28 @@ def _md_escape(s: str) -> str:
 
 def _delta(delta: str) -> str:
     return delta or "±0"
+
+
+def _source_url(player: str, total: bool = False) -> str:
+    """对应查询页面的直达 URL（个人战绩页 / 总战绩页）。"""
+    action = ACT_TOTAL if total else ACT_INDEX
+    return QUERY_ENDPOINT + "?r=" + action + "&pn=" + urllib.parse.quote(player, safe="")
+
+
+def _source_line(player: str, style: str, total: bool = False) -> str:
+    """结尾来源行：plain 输出裸 URL，markdown 风格输出可点击链接。"""
+    url = _source_url(player, total)
+    if style == "plain":
+        return "数据来源：" + url
+    return "数据来源：[" + url + "](" + url + ")"
+
+
+def _class_power_line(key: str, value: str) -> str:
+    """车型战斗力一行；0 视作"暂无数据"。"""
+    label = CLASS_CN.get(key, key) + "（" + key + "）"
+    if value in ("", "0"):
+        return label + "：暂无"
+    return label + "：" + value
 
 
 # ═══════════════ 个人战绩页（r=default/index） ═══════════════
@@ -43,6 +76,15 @@ def format_index_reply(st: PlayerStats, style: str = "qq_md") -> str:
     if style == "table":
         return _index_md_table(st)
     return _index_qq_md(st)
+
+
+def _tank_brief_line(t, bold_name: bool) -> str:
+    """单辆坦克一行：名称（类型）/胜率/场次/战力/场均伤害/命中率。"""
+    name = "**" + t.name + "**" if bold_name else t.name
+    dmg = (t.avg or {}).get("场均伤害", "-")
+    hit = (t.avg or {}).get("命中率", "-")
+    return "- %s（%s）：胜率 %s ｜ %s 场 ｜ 战力 **%s** ｜ 场均伤害 %s ｜ 命中率 %s" % (
+        name, t.vehicle_type, t.win_rate, t.battles, t.power, dmg, hit)
 
 
 def _index_qq_md(st: PlayerStats) -> str:
@@ -65,17 +107,23 @@ def _index_qq_md(st: PlayerStats) -> str:
         lines.append("- 场均：**杀伤 %s** ｜ 经验 %s ｜ 击毁 %s" % (av["杀伤"], av.get("经验", "-"), av.get("击毁", "-")))
         lines.append("- 场均：占领 %s ｜ 防守 %s ｜ 发现 %s" % (av.get("占领", "-"), av.get("防守", "-"), av.get("发现", "-")))
     if st.tanks:
-        lines += ["", "🚗 **常用坦克**"]
+        lines += ["", "🚗 **常用坦克**（战力 / 胜率 / 场均伤害 / 命中率）"]
         for t in st.tanks[:5]:
-            lines.append("- %s（%s） 胜率 %s ｜ %s 场 ｜ 战力 **%s**" % (t.name, t.vehicle_type, t.win_rate, t.battles, t.power))
+            lines.append(_tank_brief_line(t, bold_name=True))
+    if st.class_power:
+        lines += ["", "📊 **各车型近 1000 场单车战斗力**"]
+        for key, value in st.class_power.items():
+            lines.append("- " + _class_power_line(key, value))
     if st.recent_battles:
         lines += ["", "🕘 **最近对局**（最新在前）"]
         for b in st.recent_battles[:5]:
             mark = "✅" if b.result == "胜利" else "❌"
             lines.append("- %s %s %s（%s ｜ %s）" % (mark, b.result, b.exp, b.mode, b.time))
     if st.evaluation:
-        lines += ["", "> 盒子评价：%s" % st.evaluation[0]]
-    lines += ["", SOURCE_NOTE]
+        lines += ["", "📝 **盒子评价**"]
+        for ev in st.evaluation:
+            lines.append("- " + ev)
+    lines += ["", _source_line(st.player, "qq_md")]
     return NL.join(lines)
 
 
@@ -87,25 +135,33 @@ def _index_plain(st: PlayerStats) -> str:
         head += " | 更新于 %s" % st.updated_at
     head += "）"
     lines.append(head)
-    lines.append("胜率 %s（胜 %s / 负 %s / 共 %s） ｜ 命中率 %s ｜ 出战等级 %s" % (r.win_rate, r.win, r.lose, r.total, r.hit_rate, r.tier))
+    lines.append("胜率 %s（胜 %s / 负 %s / 共 %s） | 命中率 %s | 出战等级 %s" % (r.win_rate, r.win, r.lose, r.total, r.hit_rate, r.tier))
     av = st.avg_per_battle
     if av:
-        lines.append("场均：杀伤 %s ｜ 经验 %s ｜ 击毁 %s ｜ 占领 %s ｜ 防守 %s ｜ 发现 %s" % (
+        lines.append("场均：杀伤 %s | 经验 %s | 击毁 %s | 占领 %s | 防守 %s | 发现 %s" % (
             av.get("杀伤", "-"), av.get("经验", "-"), av.get("击毁", "-"),
             av.get("占领", "-"), av.get("防守", "-"), av.get("发现", "-")))
     if st.tanks:
-        parts = []
+        lines.append("常用坦克：")
         for t in st.tanks[:5]:
-            parts.append("%s（%s，%s·%s场·战力%s）" % (t.name, t.vehicle_type, t.win_rate, t.battles, t.power))
-        lines.append("常用坦克：" + " ".join(parts))
+            dmg = (t.avg or {}).get("场均伤害", "-")
+            hit = (t.avg or {}).get("命中率", "-")
+            lines.append("· %s（%s）%s | %s场 | 战力 %s | 场均伤害 %s | 命中率 %s" % (
+                t.name, t.vehicle_type, t.win_rate, t.battles, t.power, dmg, hit))
+    if st.class_power:
+        lines.append("各车型近1000场单车战斗力：")
+        for key, value in st.class_power.items():
+            lines.append("· " + _class_power_line(key, value))
     if st.recent_battles:
         parts = []
         for b in st.recent_battles[:5]:
             parts.append("%s%s" % (b.result, b.exp))
         lines.append("最近对局：" + " / ".join(parts) + "（%s）" % st.recent_battles[0].mode)
     if st.evaluation:
-        lines.append("盒子评价：" + st.evaluation[0])
-    lines.append(SOURCE_NOTE)
+        lines.append("盒子评价：")
+        for ev in st.evaluation:
+            lines.append("· " + ev)
+    lines.append(_source_line(st.player, "plain"))
     return NL.join(lines)
 
 
@@ -127,12 +183,28 @@ def _index_md_table(st: PlayerStats) -> str:
         if key in av:
             lines.append("| 场均%s | %s |" % (_md_escape(key), _md_escape(av[key])))
     if st.tanks:
-        lines += ["", "### 常用坦克", "", "| 坦克 | 类型 | 胜率 | 场次 | 战力 |", "| --- | --- | --- | --- | --- |"]
+        lines += ["", "### 常用坦克", "",
+                  "| 坦克 | 类型 | 胜率 | 场次 | 战力 | 场均伤害 | 命中率 |",
+                  "| --- | --- | --- | --- | --- | --- | --- |"]
         for t in st.tanks[:5]:
-            lines.append("| %s | %s | %s | %s | %s |" % (_md_escape(t.name), t.vehicle_type, t.win_rate, t.battles, t.power))
+            dmg = (t.avg or {}).get("场均伤害", "-")
+            hit = (t.avg or {}).get("命中率", "-")
+            lines.append("| %s | %s | %s | %s | %s | %s | %s |" % (
+                _md_escape(t.name), t.vehicle_type, t.win_rate, t.battles, t.power, _md_escape(dmg), _md_escape(hit)))
+    if st.class_power:
+        lines += ["", "### 各车型近 1000 场单车战斗力", "", "| 车型 | 战斗力 |", "| --- | --- |"]
+        for key, value in st.class_power.items():
+            lines.append("| %s | %s |" % (_md_escape(_class_power_line(key, value).split("：")[0]), _md_escape(_class_power_line(key, value).split("：", 1)[1])))
+    if st.recent_battles:
+        lines += ["", "**最近对局**（最新在前）"]
+        for b in st.recent_battles[:5]:
+            mark = "✅" if b.result == "胜利" else "❌"
+            lines.append("- %s %s %s（%s ｜ %s）" % (mark, b.result, b.exp, b.mode, b.time))
     if st.evaluation:
-        lines += ["", "> 盒子评价：" + st.evaluation[0]]
-    lines += ["", SOURCE_NOTE]
+        lines += ["", "**盒子评价**"]
+        for ev in st.evaluation:
+            lines.append("- " + ev)
+    lines += ["", _source_line(st.player, "table")]
     return NL.join(lines)
 
 
@@ -167,7 +239,7 @@ def _total_qq_md(ts: TotalStats) -> str:
         lines += ["", "🚗 **最近常用坦克**"]
         for t in ts.recent_tanks[:5]:
             lines.append("- %s：%s 场 ｜ %s ｜ 战力 **%s**" % (t.name, t.battles, t.win_rate, t.power))
-    lines += ["", SOURCE_NOTE]
+    lines += ["", _source_line(ts.player, "qq_md", total=True)]
     return NL.join(lines)
 
 
@@ -176,7 +248,7 @@ def _total_plain(ts: TotalStats) -> str:
     lines.append("%s（%s）" % (ts.join_days, ts.join_date) if ts.join_days else "入伍时间未知")
     hd = ts.headline
     if hd.get("胜率"):
-        lines.append("总胜率 %s ｜ 场均伤害 %s ｜ 场均助攻 %s ｜ 场均经验 %s" % (
+        lines.append("总胜率 %s | 场均伤害 %s | 场均助攻 %s | 场均经验 %s" % (
             hd["胜率"], hd.get("伤害", "-"), hd.get("助攻", "-"), hd.get("经验", "-")))
     if ts.total_cols and ts.total_row and ts.avg_row:
         n = min(len(ts.total_cols), len(ts.total_row), len(ts.avg_row))
@@ -189,7 +261,7 @@ def _total_plain(ts: TotalStats) -> str:
         for t in ts.recent_tanks[:5]:
             parts.append("%s（%s场·%s·战力%s）" % (t.name, t.battles, t.win_rate, t.power))
         lines.append("最近常用坦克：" + " ".join(parts))
-    lines.append(SOURCE_NOTE)
+    lines.append(_source_line(ts.player, "plain", total=True))
     return NL.join(lines)
 
 
@@ -218,7 +290,7 @@ def _total_md_table(ts: TotalStats) -> str:
         lines += ["", "### 最近常用坦克", "", "| 坦克 | 场次 | 胜率 | 战力 |", "| --- | --- | --- | --- |"]
         for t in ts.recent_tanks[:5]:
             lines.append("| %s | %s | %s | %s |" % (_md_escape(t.name), t.battles, t.win_rate, t.power))
-    lines += ["", SOURCE_NOTE]
+    lines += ["", _source_line(ts.player, "table", total=True)]
     return NL.join(lines)
 
 
@@ -227,7 +299,7 @@ def _total_md_table(ts: TotalStats) -> str:
 
 def usage_text() -> str:
     return NL.join([
-        "🎮 坦克世界战绩查询（数据来自偶游盒子 wot.ouj.com）",
+        "🎮 坦克世界战绩查询（偶游盒子数据）",
         "",
         "用法：",
         "· /wot <昵称> —— 近期战绩（战斗力 / 胜率 / 场均 / 常用坦克）",
