@@ -1,0 +1,4 @@
+# 本插件运行时无额外第三方依赖：
+# - HTTP 抓取使用 AstrBot 核心自带的 httpx（>=0.28.1）
+# - HTML 解析使用 Python 标准库 re
+# 请勿在此钉死精确版本，否则会触发 AstrBot 核心依赖版本保护（Core dependency version protection）。

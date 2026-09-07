@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 本地开发调研目录（真实站点快照/截图等，不入库；回归测试快照已内置于 tests/fixtures）
+research/
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
