@@ -65,25 +65,15 @@ class TestIndexParser(unittest.TestCase):
         self.assertIn("命中率", first.avg)
         self.assertEqual(first.avg["命中率"], "81%")
 
-    def test_evaluation_and_recent_battles(self):
-        self.assertEqual(len(self.st.evaluation), 4)
-        self.assertIn("团队中坚力量", self.st.evaluation[0])
-        self.assertEqual(len(self.st.recent_battles), 5)
-        b0 = self.st.recent_battles[0]
-        self.assertEqual(b0.result, "胜利")
-        self.assertEqual(b0.exp, "691")
-        self.assertEqual(b0.mode, "标准")
-        self.assertEqual(b0.time, "09-07 22:00")
-
     def test_tabs(self):
         labels = [t for t, _ in self.st.tabs]
         for expected in ("个人战绩", "车库", "战斗日志", "总战绩", "App日志"):
             self.assertIn(expected, labels)
 
-
-    def test_class_power(self):
-        expect = {"TD": "1565", "HT": "1538", "MT": "1376", "SPG": "0", "LT": "1427"}
-        self.assertEqual(self.st.class_power, expect)
+    def test_deleted_sections_not_parsed(self):
+        """用户要求删除的区块（各车型战斗力/最近对局/盒子评价）不再进模型。"""
+        for attr in ("class_power", "recent_battles", "evaluation"):
+            self.assertFalse(hasattr(self.st, attr), attr)
 
     def test_to_dict_roundtrip(self):
         d = self.st.to_dict()

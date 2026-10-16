@@ -1,4 +1,7 @@
 # 本插件运行时无额外第三方依赖：
-# - HTTP 抓取使用 AstrBot 核心自带的 httpx（>=0.28.1）
-# - HTML 解析使用 Python 标准库 re
+# - HTTP 抓取使用 AstrBot 核心自带的 httpx（>=0.28.1）：
+#     盒子战绩页（HTML）与官方坦克营地接口（JSON）共用
+# - 解析使用 Python 标准库 re / json / dataclasses
+# - 官方营地接口实测**不需要** curl_cffi 之类的浏览器指纹库（详见 AGENTS.md 与
+#     research/WOTCAM_INTEGRATION_PLAN.md §2.1），请勿为此新增依赖
 # 请勿在此钉死精确版本，否则会触发 AstrBot 核心依赖版本保护（Core dependency version protection）。

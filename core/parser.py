@@ -17,7 +17,6 @@ from .config import ACT_INDEX, ACT_TOTAL, ParseError, PlayerNotFoundError
 __all__ = [
     "RecentStats",
     "TankDetail",
-    "BattleBrief",
     "PlayerStats",
     "TotalTankRow",
     "TotalStats",
@@ -25,9 +24,6 @@ __all__ = [
 ]
 
 # ───────────────────── 低层工具 ─────────────────────
-
-CLASS_ORDER = ("TD", "HT", "MT", "SPG", "LT")  # 与 userRecord.js 蜘蛛图 categories 一致
-
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -124,19 +120,8 @@ class TankDetail:
 
 
 @dataclass
-class BattleBrief:
-    """最近对局（首页侧栏 5 条）"""
-
-    tank_img: str = ""
-    result: str = ""        # 胜利/失败/…
-    exp: str = ""           # 本场经验/得分
-    mode: str = ""          # 标准 等
-    time: str = ""          # 09-07 22:00
-
-
-@dataclass
 class PlayerStats:
-    """个人战绩页（r=default/index）全量结构化结果"""
+    """个人战绩页（r=default/index）结构化结果"""
 
     player: str = ""
     avatar: str = ""
@@ -148,10 +133,7 @@ class PlayerStats:
     recent: RecentStats = field(default_factory=RecentStats)
     avg_per_battle: dict = field(default_factory=dict)  # 杀伤/经验/击毁/占领/防守/发现
     tanks: list = field(default_factory=list)           # list[TankDetail] 常用坦克（按使用频率）
-    evaluation: list = field(default_factory=list)      # 盒子评价文案
-    recent_battles: list = field(default_factory=list)  # list[BattleBrief]
     tabs: list = field(default_factory=list)            # 页面标签 (text, href)
-    class_power: dict = field(default_factory=dict)     # 各车型近1000场单车战斗力 {TD/HT/MT/SPG/LT: 数值}
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -308,56 +290,12 @@ def _parse_index(html_text: str) -> PlayerStats:
         by_key[td.key] = td
     st.tanks = [by_key[k] for k in tank_keys if k in by_key] or list(by_key.values())
 
-    # 盒子评价
-    ev_blk = _block(html_text, "comment-list__text")
-    if ev_blk:
-        st.evaluation = [_strip(p) for p in re.findall(r"<p>([\s\S]*?)</p>", ev_blk)]
-
-    # 最近 5 局
-    recent_blk = _block(html_text, "userRecord-recent__box")
-    for li in re.findall(r"<li>([\s\S]*?)</li>", recent_blk):
-        bb = BattleBrief()
-        m = re.search(r'<img src="([^"]+)" class="recent-list__icon"', li)
-        if m:
-            bb.tank_img = m.group(1)
-        rows = _rows(li)
-        for idx, row in enumerate(rows[:2]):
-            cells = _td_cells(row)
-            if idx == 0 and cells:
-                bb.result = cells[0]
-                if len(cells) > 1:
-                    bb.exp = cells[1]
-            elif idx == 1 and cells:
-                bb.mode = cells[0]
-                if len(cells) > 1:
-                    bb.time = cells[1]
-        if bb.result or bb.time:
-            st.recent_battles.append(bb)
-
     # 标签页
-    tabs_blk = html_text
-    m = re.search(r'<ul class="mod-tabs-trigger[^"]*"[^>]*>([\s\S]*?)</ul>', tabs_blk)
+    m = re.search(r'<ul class="mod-tabs-trigger[^"]*"[^>]*>([\s\S]*?)</ul>', html_text)
     if m:
         for am in re.finditer(r'<a href="([^"]+)"[^>]*>([^<]+)</a>', m.group(1)):
             st.tabs.append((_strip(am.group(2)), _strip(am.group(1))))
 
-    # 各车型近 1000 场单车战斗力
-    # 数据位于页面底部脚本：App.init([Math.min(2000, v), Math.min(2000, v), ...])，共 5 项，
-    # 与 userRecord.js 蜘蛛图 categories 顺序一一对应：TD/HT/MT/SPG/LT（y 轴上限 2000）。
-    # 用普通字符串定位 + 分段拆分（页面结构固定，避免正则转义脆弱）。
-    init_i = html_text.find("App.init([")
-    if init_i >= 0:
-        seg = html_text[init_i + len("App.init(["):]
-        seg = seg[: seg.find("]);")] if seg.find("]);") >= 0 else ""
-        nums = []
-        for part in seg.split("Math.min(")[1:]:
-            inner = part[: part.find(")")].replace(" ", "")
-            pair = inner.split(",")
-            if len(pair) >= 2 and pair[0] == "2000" and pair[1]:
-                nums.append(pair[1])
-        for i, key in enumerate(CLASS_ORDER):
-            if i < len(nums):
-                st.class_power[key] = nums[i]
     # 防御：核心数据一个都没解析到 → 大概率页面已改版/结构异常
     if not st.power and not st.tanks and not st.avg_per_battle:
         snippet = _strip(html_text)[:120]

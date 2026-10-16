@@ -4,6 +4,9 @@
 设计要点：
 - 不登录、不带 Cookie、不需要浏览器——直接拿服务端渲染 HTML（2026-09 实测可行）。
 - 幂等 GET，网络异常/5xx 自动重试 HTTP_RETRY 次。
+- **403 视为"站点限流"**：该站对单 IP 有严格请求配额（2026-10-16 实测，详见
+  research/WOTCAM_INTEGRATION_PLAN.md §2.2），抛 RateLimitedError 以便上层给出
+  "稍后重试"而不是"未知错误"的提示；不重试（撞限额后立刻重试只会加深惩罚）。
 - 本模块不落盘任何文件（无缓存）；解析交给 core/parser.py。
 """
 import logging
@@ -17,6 +20,7 @@ from .config import (
     HTTP_TIMEOUT,
     QUERY_ENDPOINT,
     USER_AGENT,
+    RateLimitedError,
     WotQueryError,
 )
 
@@ -60,7 +64,11 @@ class WotBoxFetcher:
                 ) as client:
                     return await self._do_get(client, url)
             except httpx.HTTPStatusError as e:
-                # 服务端对查询一律返回 200；4xx/5xx 视为异常，重试 5xx
+                # 服务端对查询一律返回 200；403 是该站的"限流/风控"信号（实测会持续数十秒~数分钟）
+                if e.response.status_code == 403:
+                    raise RateLimitedError(
+                        f"站点限流（HTTP 403，{len(e.response.content)} 字节响应）"
+                    ) from e
                 if 500 <= e.response.status_code < 600 and attempt < HTTP_RETRY:
                     last_error = e
                     continue

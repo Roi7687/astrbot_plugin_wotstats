@@ -9,7 +9,7 @@ import httpx
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.config import WotQueryError
+from core.config import RateLimitedError, WotQueryError
 from core.fetcher import WotBoxFetcher, build_query_url
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -111,6 +111,30 @@ class TestFetch(unittest.TestCase):
 
         with self.assertRaises(WotQueryError):
             _run(run())
+
+    def test_403_is_rate_limited_and_not_retried(self):
+        """403 是该站的限流信号：归类为 RateLimitedError，且不重试（重试只会加深惩罚）。"""
+        state = {"n": 0}
+
+        def handler(request):
+            state["n"] += 1
+            return httpx.Response(403, text="Forbidden")
+
+        async def run():
+            async with _client(handler) as client:
+                fetcher = WotBoxFetcher(client=client)
+                await fetcher.fetch("loy1234")
+
+        with self.assertRaises(RateLimitedError):
+            _run(run())
+        self.assertEqual(state["n"], 1)
+        # RateLimitedError 是 WotQueryError 的子类，上层可用一个 except 兜住
+        self.assertTrue(issubclass(RateLimitedError, WotQueryError))
+
+    def test_user_agent_is_not_browser_like(self):
+        """实测：该站会 403 掉浏览器 UA，因此刻意使用非浏览器标识串。"""
+        from core.config import USER_AGENT
+        self.assertNotIn("Mozilla", USER_AGENT)
 
 
 if __name__ == "__main__":

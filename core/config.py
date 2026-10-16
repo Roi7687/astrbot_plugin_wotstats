@@ -28,10 +28,45 @@ ACT_MOBILE = "default/mobile"        # App 日志
 # ── 抓取参数 ──
 HTTP_TIMEOUT = 15.0        # 单次请求超时（秒）
 HTTP_RETRY = 2             # 网络异常/5xx 的重试次数（幂等 GET，可安全重试）
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-)
+# 偶游盒子的查询接口对本机 IP 有严格配额：短时间多次请求后会长时间返回 403
+# （2026-10-16 实测；详见 research/WOTCAM_INTEGRATION_PLAN.md §2.2）。
+# 浏览器 UA 在该站从未成功过一次，因此这里刻意使用"非浏览器标识串"。
+USER_AGENT = "astrbot-plugin-wotstats/0.2 (+https://github.com/Roi7687/astrbot_plugin_wotstats)"
+RATE_LIMIT_COOLDOWN = 40   # 撞 403 后建议的冷却秒数（仅用于提示文案）
+
+# ── 坦克营地（tbox.wot.360.cn，官方 APP 数据源）──
+# 2026-10-16 实测：全部免签接口用 httpx 直接可访问，无需 curl_cffi / 无需登录 / 无需落盘。
+CAMP_API_BASE = "https://tbox.wot.360.cn"
+CAMP_REFERER = "https://camp.wot.360.cn/"
+CAMP_HOME = "https://camp.wot.360.cn/"          # 展示用（来源行）
+CAMP_TIMEOUT = 10.0
+CAMP_RETRY = 2
+CAMP_PERIODS = ("all", "day_7", "day_30")       # 生涯 / 近 7 天 / 近 30 天
+CAMP_PERIOD_CN = {"all": "生涯", "day_7": "近 7 天", "day_30": "近 30 天"}
+
+CAMP_ENABLED = True        # 总开关：/wot 是否附带营地数据（速览 + 常用坦克表）
+# 「常用坦克」= 营地近 CAMP_SCAN_DAYS 天内打过的全部车（以营地为准，不再受盒子 TOP5 限制）
+CAMP_SCAN_DAYS = 30            # 时间窗（天）
+CAMP_SCAN_MAX_BATTLES = 600    # 时间窗内最多翻多少场（安全上限，防止极端活跃玩家打爆请求数）
+CAMP_BATTLE_PAGE_SIZE = 100    # 逐场单页条数（越小越快：100 条 ≈0.8s，200 条 ≈1.7s）
+CAMP_BATTLE_BATCH = 3          # 一次并发翻几页（减小总体等待，营地侧不限流）
+CAMP_TANKS_SCAN = 60           # 最多为多少辆车查近 30 天单车数据（超出部分丢弃）
+CAMP_TANKS_TOP = 0             # 展示条数：0 = 全部（用户要求显示 30 天内全部常用坦克）
+CAMP_CACHE_TTL = 0         # 进程内缓存秒数（0=不缓存，遵守"运行时零缓存"约定）
+WGID_CACHE_TTL = 21600     # 昵称→wgid 的进程内缓存秒数（6 小时；只是 ID 映射，非战绩数据）
+
+# 坦克目录静态资产（车名 → tank_id）。由 wotcamp/tank_catalog.json 生成，只读、运行期不写。
+TANK_CATALOG_FILE = os.path.join(PLUGIN_DIR, "assets", "tank_catalog.json")
+
+# ── 官方玩家搜索（wotgame.cn，用于「昵称 → wgid」，2026-10-16 实测）──
+# GET https://wotgame.cn/zh-cn/community/accounts/search/?name=<昵称>
+# → {"response": [{"account_id": "<wgid>", "account_name": ..., "clan_tag": ...}]}
+# 免登录、免签名；实测 15 次连发全 200（1.4s）；大小写不敏感；返回 ≤25 条模糊匹配，需自行挑精确项。
+# 注意：服务端要求昵称 **至少 4 个字符**（不足返回 HTTP 409），短昵称需回落到盒子页面取 p_id。
+WG_SEARCH_URL = "https://wotgame.cn/zh-cn/community/accounts/search/"
+WG_PORTAL_REFERER = "https://wotgame.cn/zh-cn/community/accounts/"
+WG_SEARCH_MIN_LEN = 4
+WG_SEARCH_TIMEOUT = 10.0
 
 # ── 昵称约束（服务端要求长度 > 1，大小写敏感；中文昵称常见）──
 NAME_MIN_LEN = 2
@@ -73,6 +108,26 @@ class PlayerNotFoundError(Exception):
     """查无此人（站点返回 .not-find-user 提示块）"""
 
 
+class RateLimitedError(WotQueryError):
+    """站点限流（HTTP 403）：偶游盒子对单 IP 有严格配额，需等待后重试。"""
+
+
 class ParseError(Exception):
     """HTML 解析失败（页面结构可能改版，需更新 core/parser.py 并刷新 research 快照）"""
+
+
+class CampError(Exception):
+    """坦克营地接口异常：网络 / errno!=0 / 响应结构异常"""
+
+
+class CampNotFoundError(CampError):
+    """坦克营地查无此人（errno=0 但 userInfo.nick_name 为空）"""
+
+
+class WgSearchError(Exception):
+    """官方玩家搜索（wotgame.cn）失败：网络 / 非 200 / 响应结构异常"""
+
+
+class WgTooShortError(WgSearchError):
+    """官方搜索要求昵称至少 4 个字符（服务端 HTTP 409）"""
 

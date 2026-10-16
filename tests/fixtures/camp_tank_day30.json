@@ -1,0 +1,66 @@
+{
+ "errno": 0,
+ "errmsg": "ok",
+ "time": 1792147817,
+ "data": {
+  "userInfo": {
+   "last_time": "1792082671",
+   "nick_name": "loy1234",
+   "qid": "7049441311"
+  },
+  "vBattles": {
+   "total": 1,
+   "next": false,
+   "pn": 1,
+   "psize": 20,
+   "list": [
+    {
+     "wgid": 7049441311,
+     "WN8": 2762.66,
+     "vehicle_type_cd": 32529,
+     "name": "Pz.70-120",
+     "vehicle_name": "Pz.70-120",
+     "images": {
+      "small_icon": "https://p463.ssl.qhimgs4.com/t1152b7086cd7aa802c1db9c609.png",
+      "contour_icon": "https://p463.ssl.qhimgs4.com/t1152b7086cd67b6604fb83c5b5.png",
+      "big_icon": "https://p463.ssl.qhimgs4.com/t1152b7086c21dbb80f8887aacc.png",
+      "app_icon": "https://p463.ssl.qhimgs4.com/t1152b7086c00c9729874c23408.png"
+     },
+     "vlevel": 11,
+     "vtype": "heavyTank",
+     "country": "germany",
+     "vehicle_mastery": 0,
+     "K/D": 1.4,
+     "fights": 10,
+     "win": 5,
+     "draw": 1,
+     "less": 4,
+     "damage_assisted": 0,
+     "survived": 0,
+     "hit": 144,
+     "shots": 192,
+     "exps": 12126,
+     "def_sum": 0,
+     "dmg_sum": 42583,
+     "frag_sum": 14,
+     "spot_sum": 11,
+     "exp_sum": 12126,
+     "avglevel": 0,
+     "avgdef": 0,
+     "avgdmg": 4258.3,
+     "avgfrag": 1.4,
+     "avgspot": 1.1,
+     "avgexp": 1212.6,
+     "avgshots": 19.2,
+     "avgdmgasst": 213.2,
+     "hit_rate": 75,
+     "win_rate": 50,
+     "sur_rate": 0,
+     "rank": -1
+    }
+   ]
+  },
+  "last_modify_time": 1792103076
+ },
+ "plat": 0
+}
