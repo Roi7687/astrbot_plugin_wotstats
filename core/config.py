@@ -45,6 +45,9 @@ CAMP_PERIODS = ("all", "day_7", "day_30")       # 生涯 / 近 7 天 / 近 30 �
 CAMP_PERIOD_CN = {"all": "生涯", "day_7": "近 7 天", "day_30": "近 30 天"}
 
 CAMP_ENABLED = True        # 总开关：/wot 是否附带营地数据（速览 + 常用坦克表）
+# 「三环」榜单入口（/wot3h 直接回复这个链接，方便在浏览器里查看）
+THREE_RING_URL = ("https://camp.wot.360.cn/activity.html"
+                  "#/AIrankDetailListThreeRing?type=mastery")
 # 「常用坦克」= 营地近 CAMP_SCAN_DAYS 天内打过的全部车（以营地为准，不再受盒子 TOP5 限制）
 CAMP_SCAN_DAYS = 30            # 时间窗（天）
 CAMP_SCAN_MAX_BATTLES = 600    # 时间窗内最多翻多少场（安全上限，防止极端活跃玩家打爆请求数）

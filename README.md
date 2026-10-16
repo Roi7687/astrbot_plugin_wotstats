@@ -13,6 +13,7 @@
   （近 7 天 / 近 30 天 / 生涯的 WN8、场次、胜率、K/D、全服排名、近 30 天场均）
   **＋ 常用坦克表：以营地近 30 天为准，列出这段时间打过的全部车（营地数据为主，「盒子效率」能取到时才作为补充追加）**
 - `/wot 总 <昵称>`（或 `/wot 总战绩 <昵称>`）—— 总战绩（入伍时间/天数、全时段胜率、总体/场均击毁-占领-防守-发现、最近常用坦克）
+- `/wot3h` —— 坦克世界「三环」榜单直达链接（浏览器打开，无需登录）
 - `/wot help` —— 用法帮助
 - 昵称**区分大小写**；中文昵称可直接输入（如 `/wot 坦克玩家甲`）
 
@@ -61,7 +62,7 @@
 开发与维护约定见 [AGENTS.md](AGENTS.md)；解析回归测试基于 tests/fixtures/ 的真实站点/接口快照。
 
 ```bash
-python -m unittest discover -s tests -t .        # 单元测试（150 项，不联网）
+python -m unittest discover -s tests -t .        # 单元测试（159 项，不联网）
 python research/verify_integration.py loy1234    # 端到端实网验证（可选 --fixture-box 离线）
 python research/verify_command_handler.py        # 指令层验证（含桩驱动降级分支）
 ```

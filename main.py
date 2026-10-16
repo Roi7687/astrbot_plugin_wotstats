@@ -4,6 +4,7 @@
 指令：
 - /wot <昵称>             战绩摘要（偶游盒子数据 + 官方坦克营地：三时段 WN8 + 近30天全部常用坦克）
 - /wot 总 <昵称>          总战绩摘要（入伍时间 / 全时段胜率 / 总体与场均 / 最近常用坦克）
+- /wot3h                  《坦克营地》「三环」榜单直达链接（浏览器打开）
 - /wot help               用法帮助
 
 设计约定：
@@ -52,6 +53,7 @@ from .core.formatter import (
     player_not_found_text,
     rate_limited_brief,
     rate_limited_text,
+    three_ring_text,
     usage_text,
 )
 from .core.parser import parse_page
@@ -85,6 +87,16 @@ class WotStatsPlugin(Star):
         # 进程内缓存（不落盘）：wgid 映射长期保留，查询数据默认不缓存（CAMP_CACHE_TTL=0）
         self._wgid_cache = TTLCache(WGID_CACHE_TTL)
         self._camp_cache = TTLCache(CAMP_CACHE_TTL)
+
+    # ═════════════════ 指令：/wot3h（三环榜单直达链接） ═════════════════
+
+    @filter.command("wot3h")
+    async def wot3h_command(self, event: AstrMessageEvent):
+        """只回一个《坦克营地》「三环」榜单链接，方便在浏览器里查看。
+
+        注意：/wot 的过滤规则是「等于 wot 或以 "wot " 开头」，因此 /wot3h 不会被 /wot 吃掉。
+        """
+        yield self._build_result(event, three_ring_text(self._pick_style(event)))
 
     # ═════════════════ 指令：/wot ═════════════════
 

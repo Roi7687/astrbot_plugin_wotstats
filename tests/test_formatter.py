@@ -7,10 +7,11 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.camp_model import CampPeriod, CampPlayer, CampTank
+from core.config import THREE_RING_URL
 from core.formatter import (format_camp_block, format_camp_brief,
                             format_index_reply, format_total_reply,
                             player_not_found_text, rate_limited_brief,
-                            rate_limited_text, usage_text)
+                            rate_limited_text, three_ring_text, usage_text)
 from core.parser import (PlayerStats, RecentStats, TankDetail, TotalStats,
                          TotalTankRow)
 
@@ -264,6 +265,30 @@ class TestCommonText(unittest.TestCase):
         self.assertIn("限流", t)
         self.assertIn("坦克营地", t)
         self.assertIn("战斗力", t)      # 说清缺的是盒子那部分
+
+
+class TestThreeRing(unittest.TestCase):
+    """`/wot3h`：只回一个可在浏览器打开的「三环」榜单链接。"""
+
+    def test_qq_md_link(self):
+        text = three_ring_text("qq_md")
+        self.assertIn(THREE_RING_URL, text)
+        self.assertIn("[%s](%s)" % (THREE_RING_URL, THREE_RING_URL), text)   # QQ 官方 Markdown 可点击
+        self.assertEqual(text.count("\n"), 1)                                # 两行：标题 + 链接
+
+    def test_plain_bare_url(self):
+        text = three_ring_text("plain")
+        self.assertIn(THREE_RING_URL, text)
+        self.assertNotIn("**", text)
+        self.assertNotIn("](", text)                     # 纯文本给裸 URL，可直接复制
+
+    def test_url_is_official_three_ring_page(self):
+        self.assertTrue(THREE_RING_URL.startswith("https://camp.wot.360.cn/"))
+        self.assertIn("AIrankDetailListThreeRing", THREE_RING_URL)
+        self.assertIn("type=mastery", THREE_RING_URL)
+
+    def test_usage_mentions_command(self):
+        self.assertIn("/wot3h", usage_text())
 
 
 class TestCampBlock(unittest.TestCase):

@@ -24,6 +24,7 @@ from .config import (
     CAMP_PERIOD_CN,
     QUERY_ENDPOINT,
     RATE_LIMIT_COOLDOWN,
+    THREE_RING_URL,
 )
 from .parser import PlayerStats, TotalStats
 from .tanks import strip_quotes
@@ -32,6 +33,8 @@ __all__ = [
     "format_index_reply",
     "format_total_reply",
     "format_camp_brief",
+    "format_camp_block",
+    "three_ring_text",
     "usage_text",
     "player_not_found_text",
     "rate_limited_text",
@@ -364,13 +367,27 @@ def usage_text() -> str:
         "用法：",
         "· /wot <昵称> —— 战绩摘要：盒子数据 + 营地近 30 天常用坦克（含盒子效率对照）",
         "· /wot 总 <昵称>（或 /wot 总战绩 <昵称>）—— 总战绩",
+        "· /wot3h —— 坦克世界「三环」榜单直达链接（浏览器打开）",
         "· /wot help —— 本帮助",
         "",
-        "示例：/wot loy1234　/wot 总 庇护者一号",
+        "示例：/wot loy1234　/wot 总 庇护者一号　/wot3h",
         "",
         "💡 昵称区分大小写；中文昵称可直接输入；战绩非实时，更新有一定延迟。",
         "💡 「常用坦克」以官方营地近 30 天数据为准；「战斗力」（盒子）与「WN8」（营地）是两套口径，不可换算。",
     ])
+
+
+def three_ring_text(style: str = "qq_md") -> str:
+    """`/wot3h` 的回复：只给《坦克营地》「三环」榜单的直达链接。
+
+    官方页面是前端路由（hash 路由），链接可直接在浏览器打开；
+    markdown 风格用 [url](url) 形式（QQ 官方 Markdown 里可点击，同时保留可复制的原文）。
+    """
+    url = THREE_RING_URL
+    if style == "plain":
+        return NL.join(["🏅 坦克世界「三环」查询（复制到浏览器打开）", url])
+    return NL.join(["🏅 **坦克世界「三环」查询**（点击或复制到浏览器打开）",
+                    "[%s](%s)" % (url, url)])
 
 
 def player_not_found_text(nickname: str) -> str:
