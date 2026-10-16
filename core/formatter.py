@@ -31,6 +31,7 @@ __all__ = [
     "format_total_reply",
     "format_camp_brief",
     "format_camp_block",
+    "ai_panel_text",
     "three_ring_text",
     "usage_text",
     "player_not_found_text",
@@ -55,6 +56,49 @@ def _delta(delta: str) -> str:
 # （v0.3.5 删除）此处曾是 `_source_url()` / `_source_line()`：在回复结尾输出
 # 「数据来源：<盒子查询页直达链接>」。用户认为回复内容已足够详细、这行冗余，要求去掉。
 # 需要恢复时从 git 历史取回（QUERY_ENDPOINT + ?r=default/index&pn=<昵称>）。
+
+
+# ═══════════════ AI 点评用的补充面板（不进玩家可见的回复） ═══════════════
+
+
+def ai_panel_text(camp: CampPlayer) -> str:
+    """给 AI 的补充面板：玩家回复里没展示、但读表需要的字段。
+
+    背景：AI 提示词要求"手里只有宏观面板（场次、胜率、WN8、场均伤害、命中/K/D/点亮/占防）"，
+    而玩家可见的回复只带 WN8/场次/胜率/场均伤害（营地段还删掉了近 30 天场均行）。
+    因此这里把**已有但没展示**的字段单独拼一段，只喂给 AI，不进玩家可见文本：
+
+    - 近 30 天场均：伤害 / 击毁 / 点亮 / 防守 / 经验 / 命中率 / 出战等级；
+    - 单车（近 30 天 >门槛场次）：K/D 与命中率——用于识别"轻坦只顾偷炮不点灯"这类问题。
+
+    返回空串表示没有可用数据（调用方跳过）。
+    """
+    if camp is None:
+        return ""
+    lines = ["【补充面板｜仅你可见，不要原样复述数字】"]
+    d30 = camp.day_30
+    if d30 and d30.fights > 0:
+        lines.append("近 30 天场均：伤害 %s ｜ 击毁 %s ｜ 点亮 %s ｜ 防守 %s ｜ 经验 %s ｜ 命中率 %s ｜ 出战等级 %s" % (
+            _fmt_int(d30.avgdmg), _fmt_num(d30.avgfrag, 2), _fmt_num(d30.avgspot, 2),
+            _fmt_num(d30.avgdef, 2), _fmt_int(d30.avgexp), _fmt_pct(d30.hit_rate, 1),
+            _fmt_num(d30.avglevel, 1)))
+    d7 = camp.day_7
+    if d7 and d7.fights > 0:
+        lines.append("近 7 天场均：伤害 %s ｜ 击毁 %s ｜ 点亮 %s ｜ 命中率 %s" % (
+            _fmt_int(d7.avgdmg), _fmt_num(d7.avgfrag, 2), _fmt_num(d7.avgspot, 2),
+            _fmt_pct(d7.hit_rate, 1)))
+    rows = _tank_rows(camp, None)
+    detail = []
+    for r in rows:
+        parts = ["%s K/D %s" % (r.name, _fmt_num(r.kd, 2))]
+        if r.hit_rate:
+            parts.append("命中 %s" % _fmt_pct(r.hit_rate, 1))
+        if r.avgdmgasst:
+            parts.append("助攻 %s" % _fmt_int(r.avgdmgasst))
+        detail.append("·".join(parts))
+    if detail:
+        lines.append("单车（近 30 天 >%d 场）：%s" % (CAMP_TANKS_MIN_FIGHTS, "；".join(detail)))
+    return NL.join(lines) if len(lines) > 1 else ""
 
 
 # ═══════════════ 个人战绩页（r=default/index） ═══════════════

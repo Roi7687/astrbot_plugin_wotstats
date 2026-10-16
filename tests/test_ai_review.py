@@ -10,9 +10,10 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.ai_review import (AI_REVIEW_PROMPT, ask_ai_review,  # noqa: E402
-                            build_ai_prompt)
+from core.ai_review import (AI_DATA_PLACEHOLDER, AI_REVIEW_PROMPT,  # noqa: E402
+                            ask_ai_review, build_ai_prompt)
 from core.config import AI_REVIEW_MAX_CHARS, AI_REVIEW_PLUGIN  # noqa: E402
+from core.formatter import ai_panel_text  # noqa: E402
 
 STATS = "🎖 **loy1234** ｜ 近 7 天：WN8 **3,078**（164 场）\n- 常用坦克：UDES 15/16 38 场"
 
@@ -53,68 +54,103 @@ class FakeContext:
 
 
 class TestPrompt(unittest.TestCase):
-    def test_requirements_come_before_stats(self):
-        prompt = build_ai_prompt(STATS)
-        self.assertTrue(prompt.startswith(AI_REVIEW_PROMPT[:20]))   # 分析要求在前
-        self.assertTrue(prompt.rstrip().endswith(STATS.strip()))     # 战绩数据在后
-        self.assertIn("【数据】", AI_REVIEW_PROMPT)                  # 数据段标记
+    """提示词 = 用户定稿版：角色 / 5 条读表逻辑 / 黑话替换表 / 正反例 / 写作铁律与格式。"""
 
-    def test_requires_web_search(self):
-        """用户要求：显式强调联网搜索车辆资料（对方支持联网搜索）。"""
-        for key in ("必须联网搜索", "当前版本", "配件", "参考量级"):
+    def test_data_placeholder_is_filled(self):
+        """提示词末尾的 {{在此处填入玩家数据}} 由 build_ai_prompt 填入本局数据。"""
+        self.assertIn(AI_DATA_PLACEHOLDER, AI_REVIEW_PROMPT)
+        merged = build_ai_prompt(STATS)
+        self.assertNotIn(AI_DATA_PLACEHOLDER, merged)
+        self.assertTrue(merged.rstrip().endswith(STATS.strip()))
+        self.assertIn("待分析玩家数据", merged)
+
+    def test_role_is_wot_veteran_coach(self):
+        self.assertIn("国服资深指挥与老鸟教练", AI_REVIEW_PROMPT)
+        self.assertIn("严禁脱离面板瞎猜微操", AI_REVIEW_PROMPT)
+
+    def test_five_read_table_rules(self):
+        """5 条交叉比对逻辑（段位 / 高场均低胜率 / 小样本 / 单车低于均值 / 轻坦）。"""
+        for key in ("【看段位定基调】", "【高场均 + 低胜率（场次≥25场）】",
+                    "【高场均 + 极低胜率（场次<25场）】",
+                    "【单车场均明显低于本人同级均值】",
+                    "【轻坦高WN8/高直伤 + 胜率低于个人均值】"):
+            self.assertIn(key, AI_REVIEW_PROMPT)
+        self.assertIn("发牌员短期制裁", AI_REVIEW_PROMPT)      # 小样本定性
+        self.assertIn("车体特性水土不服", AI_REVIEW_PROMPT)    # 单车低于均值定性
+
+    def test_slang_replacement_table(self):
+        """黑话替换表：7 条，且必须同时给出禁用词与替代表达。"""
+        self.assertEqual(AI_REVIEW_PROMPT.count("➔ ✅"), 7)
+        for term in ("紫表大佬", "刷晚期伤害", "发牌员搞心态", "缩在二线黑枪",
+                     "开局暴毙", "眼车当TD玩", "强侧抗压"):
+            self.assertIn(term, AI_REVIEW_PROMPT)
+
+    def test_few_shot_examples_present(self):
+        """3 组正反例（严格模仿正例的推理与语气）。"""
+        self.assertEqual(AI_REVIEW_PROMPT.count("❌ 错误示范"), 3)
+        self.assertEqual(AI_REVIEW_PROMPT.count("✅ 正确示范"), 3)
+        for key in ("晚期伤害", "发牌员", "横向对比"):
             self.assertIn(key, AI_REVIEW_PROMPT)
 
-    def test_demands_reasons_not_just_actions(self):
-        """要点必须讲原因：先由数据推断问题，再给建议。"""
-        for key in ("怎么从数据下判断", "推断的问题", "数据现象", "具体怎么做"):
-            self.assertIn(key, AI_REVIEW_PROMPT)
-
-    def test_demands_seven_points_and_five_tanks(self):
-        for key in ("正好 7 条编号要点", "450~650 字", "5 条全部是车辆条目，一辆一条"):
-            self.assertIn(key, AI_REVIEW_PROMPT)
-        self.assertIn("禁止 Markdown 表格", AI_REVIEW_PROMPT)
-
-    def test_forbids_non_tank_filler_in_3_to_7(self):
-        """③~⑦ 必须是 5 辆车，不许塞"先改哪辆/短期目标/总结"。"""
-        self.assertIn("不许出现任何非车辆内容", AI_REVIEW_PROMPT)
-        for key in ("先改哪辆", "短期目标", "总结"):
-            self.assertIn(key, AI_REVIEW_PROMPT)      # 出现在"禁止"清单里
-
-    def test_forbids_spec_recital(self):
-        """用户要求：不要纯复述车辆性能/参数，有效建议更重要。"""
-        for key in ("不要纯复述车辆性能或参数", "单发 xxx", "DPM 高低"):
-            self.assertIn(key, AI_REVIEW_PROMPT)
-
-    def test_prefers_weak_tanks(self):
-        """优先选胜率低、WN8 低、场次够多的车（而不是场次最多的）。"""
-        self.assertIn("胜率低 + WN8 低 + 场次够多", AI_REVIEW_PROMPT)
-        self.assertIn("不要**挑场次最多", AI_REVIEW_PROMPT)
-        self.assertIn("只有近 30 天打过 10 场以上的车", AI_REVIEW_PROMPT)
-        self.assertIn("不足 5 辆", AI_REVIEW_PROMPT)
-
-    def test_embeds_researched_frameworks(self):
-        """联网调研后补充的权威口径：WTR 五指标（按角色）+ 数据诊断对照表 + 三环量级。"""
-        for key in ("弹夹", "高机动", "重甲", "生存率",
-                    "伤害够但胜率低", "伤害低且胜率低", "胜率高但 WN8 低", "三环线"):
-            self.assertIn(key, AI_REVIEW_PROMPT)
-
-    def test_data_scope_is_two_periods_only(self):
-        """v0.3.5：数据里不再有生涯口径，趋势只能靠近 7 天 vs 近 30 天。"""
-        self.assertIn("近 7 天 / 近 30 天", AI_REVIEW_PROMPT)
-        self.assertIn("数据里没有生涯口径", AI_REVIEW_PROMPT)
-        self.assertIn("近 7 天与近 30 天相比是进步还是停滞", AI_REVIEW_PROMPT)
-        self.assertIn("打过 10 场以上", AI_REVIEW_PROMPT)
-
-    def test_prioritises_by_repeated_mistakes(self):
-        """场次越多、胜率越低的车优先点评（错误重复次数多，改起来收益最大）。"""
-        self.assertIn("场次越多、胜率越低的车，优先级越高", AI_REVIEW_PROMPT)
-
-    def test_structure_has_seven_slots(self):
-        for key in ("WN8 档位", "共性问题", "5 条全部是车辆条目"):
+    def test_writing_rules_and_format(self):
+        """禁流水账但用概数打反差；禁脑补微观动作；7 条 500 字内、每车 60 字以内。"""
+        self.assertIn("禁报流水账，但要用概数打反差", AI_REVIEW_PROMPT)
+        self.assertIn("严禁脑补微观动作与局内改配", AI_REVIEW_PROMPT)
+        self.assertIn("严格输出 7 条，总字数 500 字以内", AI_REVIEW_PROMPT)
+        self.assertIn("每辆 60 字以内", AI_REVIEW_PROMPT)
+        for key in ("① 【定段位与底色】", "② 【核心痛点】", "③~⑦ 【单车复盘】"):
             self.assertIn(key, AI_REVIEW_PROMPT)
 
     def test_empty_stats(self):
-        self.assertEqual(build_ai_prompt("").strip(), AI_REVIEW_PROMPT.strip())
+        merged = build_ai_prompt("")
+        self.assertNotIn(AI_DATA_PLACEHOLDER, merged)
+
+
+class TestAiPanel(unittest.TestCase):
+    """补充面板：玩家可见文本里没有、但读表需要的字段（命中/点亮/防守/单车 K/D）。"""
+
+    @staticmethod
+    def _camp(with_tanks=True):
+        from core.camp_model import CampPeriod, CampPlayer, CampTank
+        tanks = [
+            CampTank(tank_id="37649", name="UDES 15/16", tier=10, fights=38, wn8=3202.8,
+                     win_rate=52.6, avgdmg=3704.0, avgdmgasst=1006.0, kd=1.31, hit_rate=74.2),
+            CampTank(tank_id="2977", name='"犀牛"', tier=10, fights=4, wn8=3670.6,
+                     win_rate=25.0, avgdmg=3831.25, kd=1.0, hit_rate=70.0),
+        ] if with_tanks else []
+        return CampPlayer(
+            nickname="loy1234",
+            periods={"day_7": CampPeriod(key="day_7", fights=164, wn8=3077.6, win_rate=61.6,
+                                         kd=1.88, avgdmg=3201.96, avgfrag=1.5, avgspot=1.8,
+                                         hit_rate=76.0),
+                     "day_30": CampPeriod(key="day_30", fights=297, wn8=2903.45, win_rate=58.25,
+                                          kd=1.77, avgdmg=3209.14, avgfrag=1.34, avgspot=1.64,
+                                          avgdef=0.71, avgexp=1100.47, hit_rate=76.82,
+                                          avglevel=10.09, rank=1941, population=187731)},
+            tanks_30d=tanks,
+        )
+
+    def test_panel_has_average_and_per_tank_detail(self):
+        panel = ai_panel_text(self._camp())
+        self.assertIn("【补充面板", panel)
+        self.assertIn("近 30 天场均", panel)
+        for key in ("伤害", "击毁", "点亮", "防守", "命中率", "出战等级"):
+            self.assertIn(key, panel)
+        self.assertIn("K/D", panel)
+        self.assertIn("UDES 15/16", panel)          # >10 场的车
+        self.assertNotIn("犀牛", panel)              # 4 场 < 门槛 → 不进面板
+
+    def test_panel_empty_without_camp(self):
+        from core.camp_model import CampPlayer
+        self.assertEqual(ai_panel_text(None), "")
+        self.assertEqual(ai_panel_text(CampPlayer(nickname="x")), "")
+        # 只有时段数据时，面板仍有近 30 天场均（含命中/点亮/防守），只是没有单车明细
+        panel = ai_panel_text(self._camp(with_tanks=False))
+        self.assertIn("近 30 天场均", panel)
+        self.assertNotIn("单车", panel)
+
+    def test_panel_marks_itself_ai_only(self):
+        self.assertIn("仅你可见", ai_panel_text(self._camp()))
 
 
 class TestAskAiReview(unittest.TestCase):
@@ -130,7 +166,7 @@ class TestAskAiReview(unittest.TestCase):
         inst = FakeStar()
         _run(ask_ai_review(FakeContext(FakeMeta(inst)), STATS))
         prompt, _ = inst.seen
-        self.assertLess(prompt.index("资深数据分析师"), prompt.index("loy1234"))
+        self.assertLess(prompt.index("老鸟教练"), prompt.index("loy1234"))   # 提示词在前、数据在后
 
     def test_length_is_capped(self):
         inst = FakeStar(answer="很" * (AI_REVIEW_MAX_CHARS + 500))

@@ -1,6 +1,6 @@
 name: astrbot_plugin_wotstats # 插件唯一识别名，以 astrbot_plugin_ 前缀开头
 display_name: 坦克世界战绩查询 # 用于展示的名字（需要版本 >= v4.5.0）
 desc: 查询坦克世界玩家战绩：偶游盒子（战斗力/近1500场）＋官方坦克营地（WN8三时段/全服排名/近30天全部常用坦克含盒子效率对照），昵称解析走官方搜索，支持 QQ 官方 Markdown 排版；/wot3h 一键取「三环」榜单链接；末尾附 AI 点评。
-version: v0.3.5 # 插件版本号。格式：v1.1.1 或者 v1.1
+version: v0.3.7 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: Roi # 作者
 repo: https://github.com/Roi7687/astrbot_plugin_wotstats # 插件的仓库地址

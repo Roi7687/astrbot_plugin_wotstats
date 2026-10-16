@@ -31,6 +31,7 @@ from .core.config import (
     ACT_INDEX,
     ACT_TOTAL,
     AI_REVIEW_ENABLED,
+    AI_REVIEW_PANEL,
     AI_REVIEW_PLUGIN,
     AI_REVIEW_TIMEOUT,
     CAMP_CACHE_TTL,
@@ -50,6 +51,7 @@ from .core.config import (
 )
 from .core.fetcher import WotBoxFetcher
 from .core.formatter import (
+    ai_panel_text,
     format_camp_block,
     format_camp_brief,
     format_index_reply,
@@ -195,7 +197,14 @@ class WotStatsPlugin(Star):
 
         # AI 点评：把「分析要求 + 战绩文本」交给 astrbot_plugin_aisearch（跨插件调用，尽力而为）
         if AI_REVIEW_ENABLED and action == ACT_INDEX and text:
-            review = await ask_ai_review(self.context, text)
+            # 提示词要求的面板字段（命中/点亮/防守/单车 K/D）没进玩家可见文本，
+            # 因此单独拼一段"补充面板"只喂给 AI（AI_REVIEW_PANEL 可关）
+            ai_input = text
+            if AI_REVIEW_PANEL and camp is not None:
+                panel = _safe_format(ai_panel_text, camp)
+                if panel:
+                    ai_input = text + "\n\n" + panel
+            review = await ask_ai_review(self.context, ai_input)
             if review:
                 label = "AI评价：" if style == "plain" else "**AI评价：**"
                 text = text + "\n\n" + label + review

@@ -12,7 +12,7 @@
 - `/wot <昵称>` —— 战绩摘要：盒子数据（战斗力、近 1500 场标准局胜率、场均）**＋ 营地数据**
   （近 7 天 / 近 30 天 / 生涯的 WN8、场次、胜率、K/D、全服排名、近 30 天场均）
   **＋ 常用坦克表：以营地近 30 天为准，列出这段时间打过的全部车（营地数据为主，「盒子效率」能取到时才作为补充追加）**
-- **＋ AI 点评**：把战绩文本交给 AI 做一段专业分析（**要求联网搜索车辆当前版本机制与三环量级；输出 7 条要点：定位 + 共性问题 + 5 辆短板车；每条先由数据推断问题再给可执行建议，禁止复述车辆参数**），附在回复末尾（`AI评价：…`）
+- **＋ AI 点评**：把战绩文本交给 AI 做一段专业分析（**老鸟教练式短评：读表逻辑 + 黑话语料 + 正反例校准；7 条 500 字内、用概数打反差、严禁脑补微操；AI 额外获得「补充面板」：命中/点亮/防守/单车 K/D**），附在回复末尾（`AI评价：…`）
 - `/wot 总 <昵称>`（或 `/wot 总战绩 <昵称>`）—— 总战绩（入伍时间/天数、全时段胜率、总体/场均击毁-占领-防守-发现、最近常用坦克）
 - `/wot3h` —— 坦克世界「三环」榜单直达链接（浏览器打开，无需登录）
 - `/wot help` —— 用法帮助
@@ -55,7 +55,8 @@
 | `WGID_CACHE_TTL` | 21600 | 昵称→wgid 进程内缓存秒数 |
 | `AI_REVIEW_ENABLED` | `True` | 是否追加 AI 点评（调用 `astrbot_plugin_aisearch`；单次 20~60s） |
 | `AI_REVIEW_PLUGIN` | `astrbot_plugin_aisearch` | 提供对话能力的插件名 |
-| `AI_REVIEW_TIMEOUT` / `AI_REVIEW_MAX_CHARS` | 120 / 1400 | 等对方回复上限（秒）/ 点评正文最大长度（提示词要求 450~650 字、7 条要点） |
+| `AI_REVIEW_TIMEOUT` / `AI_REVIEW_MAX_CHARS` | 120 / 1400 | 等对方回复上限（秒）/ 点评正文最大长度（提示词要求 7 条、500 字内） |
+| `AI_REVIEW_PANEL` | `True` | 是否把「补充面板」（命中/点亮/防守/单车 K/D，玩家可见文本里没有的字段）一并喂给 AI |
 | `USER_AGENT` | 非浏览器标识串 | 两个站点共用；**不要**改成浏览器 UA（盒子会 403） |
 
 ## 安装
@@ -67,7 +68,7 @@
 开发与维护约定见 [AGENTS.md](AGENTS.md)；解析回归测试基于 tests/fixtures/ 的真实站点/接口快照。
 
 ```bash
-python -m unittest discover -s tests -t .        # 单元测试（193 项，不联网）
+python -m unittest discover -s tests -t .        # 单元测试（191 项，不联网）
 python research/verify_integration.py loy1234    # 端到端实网验证（可选 --fixture-box 离线）
 python research/verify_command_handler.py        # 指令层验证（含桩驱动降级分支）
 ```
