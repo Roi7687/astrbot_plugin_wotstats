@@ -23,12 +23,16 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.command import GreedyStr
 
+from .core.ai_review import ask_ai_review
 from .core.cache import TTLCache
 from .core.camp_client import WotCampClient
 from .core.commands import is_wgid, parse_target
 from .core.config import (
     ACT_INDEX,
     ACT_TOTAL,
+    AI_REVIEW_ENABLED,
+    AI_REVIEW_PLUGIN,
+    AI_REVIEW_TIMEOUT,
     CAMP_CACHE_TTL,
     CAMP_ENABLED,
     CAMP_TANKS_SCAN,
@@ -87,6 +91,37 @@ class WotStatsPlugin(Star):
         # 进程内缓存（不落盘）：wgid 映射长期保留，查询数据默认不缓存（CAMP_CACHE_TTL=0）
         self._wgid_cache = TTLCache(WGID_CACHE_TTL)
         self._camp_cache = TTLCache(CAMP_CACHE_TTL)
+        self._ai_review_selfcheck(strict=False)     # 加载即自检一次（便于热重载后立刻排障）
+
+    # ═════════════════ 启动自检：AI 点评插件是否可用 ═════════════════
+
+    def _ai_review_selfcheck(self, *, strict: bool) -> None:
+        """检查跨插件调用目标（astrbot_plugin_aisearch）是否可解析。
+
+        strict=False（插件加载时）：解析不到只记 DEBUG（可能是加载顺序问题）；
+        strict=True（AstrBot 完全加载后）：解析不到记 WARNING。
+        """
+        if not AI_REVIEW_ENABLED:
+            logger.info("[WotStats] AI 点评已关闭（AI_REVIEW_ENABLED=False）")
+            return
+        try:
+            from .core.ai_review import _resolve_instance
+            inst, why = _resolve_instance(self.context, AI_REVIEW_PLUGIN)
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"[WotStats] AI 点评自检异常: {e}")
+            return
+        if inst is None:
+            msg = f"[WotStats] AI 点评不可用：{why}（战绩功能不受影响）"
+            (logger.warning if strict else logger.debug)(msg)
+        else:
+            logger.info(f"[WotStats] AI 点评可用：{AI_REVIEW_PLUGIN} → {type(inst).__name__}"
+                        f"（超时上限 {AI_REVIEW_TIMEOUT:.0f}s；对方为浏览器自动化，"
+                        f"单次约 20~60s）")
+
+    @filter.on_astrbot_loaded()
+    async def _check_ai_review_plugin(self):
+        """AstrBot 加载完成后复查一次（此时代码里所有插件都已注册）。"""
+        self._ai_review_selfcheck(strict=True)
 
     # ═════════════════ 指令：/wot3h（三环榜单直达链接） ═════════════════
 
@@ -157,6 +192,13 @@ class WotStatsPlugin(Star):
                 else err_text
             body = _safe_format(format_camp_block, camp, style) if camp is not None else ""
             text = (head + "\n\n" + body) if body else head
+
+        # AI 点评：把「分析要求 + 战绩文本」交给 astrbot_plugin_aisearch（跨插件调用，尽力而为）
+        if AI_REVIEW_ENABLED and action == ACT_INDEX and text:
+            review = await ask_ai_review(self.context, text)
+            if review:
+                label = "AI评价：" if style == "plain" else "**AI评价：**"
+                text = text + "\n\n" + label + review
 
         yield self._build_result(event, text)
 

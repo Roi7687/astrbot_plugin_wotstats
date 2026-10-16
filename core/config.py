@@ -58,6 +58,13 @@ CAMP_TANKS_TOP = 0             # 展示条数：0 = 全部（用户要求显示 
 CAMP_CACHE_TTL = 0         # 进程内缓存秒数（0=不缓存，遵守"运行时零缓存"约定）
 WGID_CACHE_TTL = 21600     # 昵称→wgid 的进程内缓存秒数（6 小时；只是 ID 映射，非战绩数据）
 
+# ── AI 点评（跨插件调用 astrbot_plugin_aisearch，实现见 core/ai_review.py）──
+AI_REVIEW_ENABLED = True    # /wot <昵称> 末尾是否追加「AI评价：……」
+AI_REVIEW_PLUGIN = "astrbot_plugin_aisearch"   # 提供对话能力的插件名（换了插件改这里）
+AI_REVIEW_TIMEOUT = 120.0   # 等对方回复的上限（秒；对方是浏览器自动化，通常 10~60s）
+AI_REVIEW_IMAGES = ()       # 随附图片（本条链路不需要，保持空元组）
+AI_REVIEW_MAX_CHARS = 1400  # AI 点评正文最大长度（超出截断；提示词要求 400~600 字 / 6~8 条）
+
 # 坦克目录静态资产（车名 → tank_id）。由 wotcamp/tank_catalog.json 生成，只读、运行期不写。
 TANK_CATALOG_FILE = os.path.join(PLUGIN_DIR, "assets", "tank_catalog.json")
 
