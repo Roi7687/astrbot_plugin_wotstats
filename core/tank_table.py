@@ -18,6 +18,7 @@
 from dataclasses import dataclass
 
 from .camp_model import CampPlayer
+from .config import CAMP_TANKS_MIN_FIGHTS
 from .tanks import normalize_name
 
 __all__ = ["TankRow", "rows_from_camp", "enrich_with_box", "build_tank_rows"]
@@ -53,14 +54,21 @@ class TankRow:
         return bool(self.box_power)
 
 
-def rows_from_camp(camp: CampPlayer) -> list:
-    """**营地口径**生成行列表：只保留近 30 天确实打过（fights>0）的车。
+def rows_from_camp(camp: CampPlayer, min_fights: int | None = None) -> list:
+    """**营地口径**生成行列表：只保留近 30 天确实打过、且**场次超过门槛**的车。
+
+    用户要求（v0.3.5）：30 天里只打过一两场的车说明不了"常用"，因此按
+    `CAMP_TANKS_MIN_FIGHTS` 过滤（默认 10 → 只留 **超过 10 场** 的车，即 ≥11 场）。
+    传入 `min_fights` 可覆盖该门槛（测试用）。
 
     `CampPlayer.tanks_30d` 已由取数层按"近 30 天场次降序"排好（常用优先），此处保持顺序。
     """
+    threshold = CAMP_TANKS_MIN_FIGHTS if min_fights is None else min_fights
     rows = []
     for t in (camp.tanks_30d if camp else []) or []:
         if not t.name or t.fights <= 0:
+            continue
+        if threshold and t.fights <= threshold:      # "超过 10 场" → >10
             continue
         rows.append(TankRow(
             name=t.name, tier=t.tier, tank_id=str(t.tank_id or ""),
@@ -108,8 +116,11 @@ def enrich_with_box(rows: list, box_tanks) -> int:
     return hits
 
 
-def build_tank_rows(camp: CampPlayer, box_tanks=None) -> list:
-    """对外入口：先取营地数据，能拿到盒子数据时再补充效率。"""
-    rows = rows_from_camp(camp)
+def build_tank_rows(camp: CampPlayer, box_tanks=None, min_fights: int | None = None) -> list:
+    """对外入口：先取营地数据（按常用门槛过滤），能拿到盒子数据时再补充效率。
+
+    `min_fights` 覆盖常用门槛（默认 `CAMP_TANKS_MIN_FIGHTS`）；传 0 表示不过滤。
+    """
+    rows = rows_from_camp(camp, min_fights=min_fights)
     enrich_with_box(rows, box_tanks)
     return rows

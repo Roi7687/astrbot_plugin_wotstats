@@ -7,6 +7,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.camp_model import CampPlayer, CampTank  # noqa: E402
+from core.config import CAMP_TANKS_MIN_FIGHTS  # noqa: E402
 from core.parser import TankDetail  # noqa: E402
 from core.tank_table import (build_tank_rows, enrich_with_box,  # noqa: E402
                              rows_from_camp)
@@ -23,7 +24,7 @@ class TestRowsFromCamp(unittest.TestCase):
         camp = camp_with(CampTank(tank_id="2977", name="犀牛", tier=10, fights=4, wn8=3671.0,
                                   win_rate=25.0, avgdmg=3831.0, avgdmgasst=1006.0, kd=1.0,
                                   hit_rate=70.0))
-        rows = rows_from_camp(camp)
+        rows = rows_from_camp(camp, min_fights=0)
         self.assertEqual(len(rows), 1)
         row = rows[0]
         self.assertEqual(row.name, "犀牛")
@@ -44,17 +45,50 @@ class TestRowsFromCamp(unittest.TestCase):
             CampTank(name="零场次", tier=10, fights=0, wn8=0.0),
             CampTank(name="", tier=10, fights=5, wn8=100.0),
         )
-        self.assertEqual([r.name for r in rows_from_camp(camp)], ["有战绩"])
+        self.assertEqual([r.name for r in rows_from_camp(camp, min_fights=0)], ["有战绩"])
 
     def test_keeps_camp_order(self):
         """顺序由取数层决定（近 30 天场次降序 = 常用优先），本模块不改动。"""
         camp = camp_with(CampTank(name="A", fights=30, wn8=1000.0),
                          CampTank(name="B", fights=5, wn8=2000.0))
-        self.assertEqual([r.name for r in rows_from_camp(camp)], ["A", "B"])
+        self.assertEqual([r.name for r in rows_from_camp(camp, min_fights=0)], ["A", "B"])
 
     def test_none_camp(self):
-        self.assertEqual(rows_from_camp(None), [])
-        self.assertEqual(rows_from_camp(CampPlayer(nickname="x")), [])
+        self.assertEqual(rows_from_camp(None, min_fights=0), [])
+        self.assertEqual(rows_from_camp(CampPlayer(nickname="x"), min_fights=0), [])
+
+
+class TestCommonTankThreshold(unittest.TestCase):
+    """v0.3.5：只把"常玩"的车放进常用坦克表（近 30 天场次 > CAMP_TANKS_MIN_FIGHTS）。"""
+
+    def test_default_threshold_is_exclusive(self):
+        camp = camp_with(
+            CampTank(name="A", fights=CAMP_TANKS_MIN_FIGHTS),          # 正好等于门槛 → 不算常用
+            CampTank(name="B", fights=CAMP_TANKS_MIN_FIGHTS + 1),      # 超过 → 保留
+            CampTank(name="C", fights=1),
+            CampTank(name="D", fights=0),
+        )
+        self.assertEqual([r.name for r in rows_from_camp(camp)], ["B"])
+
+    def test_threshold_reads_from_config(self):
+        self.assertEqual(CAMP_TANKS_MIN_FIGHTS, 10)     # 用户明确要求"超过 10 场"
+
+    def test_min_fights_override(self):
+        camp = camp_with(CampTank(name="A", fights=3), CampTank(name="B", fights=30))
+        self.assertEqual([r.name for r in rows_from_camp(camp, min_fights=0)], ["A", "B"])
+        self.assertEqual([r.name for r in rows_from_camp(camp, min_fights=10)], ["B"])
+
+    def test_order_preserved_after_filter(self):
+        """过滤不改变顺序（取数层已按近 30 天场次降序 = 常用优先）。"""
+        camp = camp_with(CampTank(name="多", fights=56), CampTank(name="少", fights=2),
+                         CampTank(name="中", fights=12))
+        self.assertEqual([r.name for r in rows_from_camp(camp)], ["多", "中"])
+
+    def test_build_tank_rows_applies_threshold_too(self):
+        camp = camp_with(CampTank(name="常用", fights=20, wn8=2000.0),
+                         CampTank(name="偶尔", fights=2, wn8=3000.0))
+        rows = build_tank_rows(camp, [TankDetail(name="偶尔", power="999")])
+        self.assertEqual([r.name for r in rows], ["常用"])       # 偶尔玩的既不显示、也不补效率
 
 
 class TestEnrichWithBox(unittest.TestCase):
@@ -63,9 +97,9 @@ class TestEnrichWithBox(unittest.TestCase):
     def rows(self):
         return [build_tank_rows(camp_with(
             CampTank(name='"犀牛"', tier=10, fights=4, wn8=3671.0),
-            CampTank(name="E-77", tier=9, fights=5, wn8=3335.0)))[0],
+            CampTank(name="E-77", tier=9, fights=5, wn8=3335.0)), min_fights=0)[0],
             build_tank_rows(camp_with(
-                CampTank(name="E-77", tier=9, fights=5, wn8=3335.0)))[0]]
+                CampTank(name="E-77", tier=9, fights=5, wn8=3335.0)), min_fights=0)[0]]
 
     def test_fills_power_by_normalized_name(self):
         """车名差异（引号/大小写/空格）要被抹平。"""
@@ -80,7 +114,7 @@ class TestEnrichWithBox(unittest.TestCase):
 
     def test_no_box_data_is_noop(self):
         for box in (None, [], [TankDetail(name="别的车", power="999")]):
-            rows = build_tank_rows(camp_with(CampTank(name="E-77", fights=5, wn8=1.0)), box)
+            rows = build_tank_rows(camp_with(CampTank(name="E-77", fights=5, wn8=1.0)), box, min_fights=0)
             self.assertEqual(len(rows), 1)
             self.assertFalse(rows[0].has_box)
             self.assertEqual(rows[0].fights, 5)    # 营地数据不受影响
@@ -88,12 +122,12 @@ class TestEnrichWithBox(unittest.TestCase):
     def test_box_dash_power_treated_as_missing(self):
         """盒子自己有这辆车但战力是 '-' → 视为无补充（不显示"盒子效率 -"）。"""
         rows = build_tank_rows(camp_with(CampTank(name="E-77", fights=5, wn8=1.0)),
-                               [TankDetail(name="E-77", power="-")])
+                               [TankDetail(name="E-77", power="-")], min_fights=0)
         self.assertFalse(rows[0].has_box)
 
     def test_box_dict_payload_supported(self):
         rows = build_tank_rows(camp_with(CampTank(name="A", fights=2, wn8=1000.0)),
-                               [{"name": "A", "power": "123", "battles": "10"}])
+                               [{"name": "A", "power": "123", "battles": "10"}], min_fights=0)
         self.assertEqual(rows[0].box_power, "123")
         self.assertEqual(rows[0].box_battles, "10")
 
@@ -101,7 +135,7 @@ class TestEnrichWithBox(unittest.TestCase):
         """补充不得覆盖营地字段（营地是主数据源）。"""
         rows = build_tank_rows(camp_with(
             CampTank(name="A", tier=10, fights=7, wn8=2500.0, win_rate=60.0, avgdmg=3000.0)),
-            [TankDetail(name="A", power="1500", battles="999")])
+            [TankDetail(name="A", power="1500", battles="999")], min_fights=0)
         row = rows[0]
         self.assertEqual((row.tier, row.fights, row.wn8, row.win_rate, row.avgdmg),
                          (10, 7, 2500.0, 60.0, 3000.0))

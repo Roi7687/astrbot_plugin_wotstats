@@ -15,14 +15,11 @@ import datetime as _dt
 import logging
 import math
 import re
-import urllib.parse
 
 from .camp_model import CampPeriod, CampPlayer
 from .config import (
-    ACT_INDEX,
-    ACT_TOTAL,
     CAMP_PERIOD_CN,
-    QUERY_ENDPOINT,
+    CAMP_TANKS_MIN_FIGHTS,
     RATE_LIMIT_COOLDOWN,
     THREE_RING_URL,
 )
@@ -55,18 +52,9 @@ def _delta(delta: str) -> str:
     return delta or "±0"
 
 
-def _source_url(player: str, total: bool = False) -> str:
-    """对应查询页面的直达 URL（个人战绩页 / 总战绩页）。"""
-    action = ACT_TOTAL if total else ACT_INDEX
-    return QUERY_ENDPOINT + "?r=" + action + "&pn=" + urllib.parse.quote(player, safe="")
-
-
-def _source_line(player: str, style: str, total: bool = False) -> str:
-    """结尾来源行：plain 输出裸 URL，markdown 风格输出可点击链接。"""
-    url = _source_url(player, total)
-    if style == "plain":
-        return "数据来源：" + url
-    return "数据来源：[" + url + "](" + url + ")"
+# （v0.3.5 删除）此处曾是 `_source_url()` / `_source_line()`：在回复结尾输出
+# 「数据来源：<盒子查询页直达链接>」。用户认为回复内容已足够详细、这行冗余，要求去掉。
+# 需要恢复时从 git 历史取回（QUERY_ENDPOINT + ?r=default/index&pn=<昵称>）。
 
 
 # ═══════════════ 个人战绩页（r=default/index） ═══════════════
@@ -114,14 +102,15 @@ def _tank_rows(camp, box_tanks):
 
 
 def _tank_heading(rows, style: str) -> str:
-    """表头：营地为主；只有当确实存在盒子效率补充时才提"盒子效率"。"""
+    """表头：营地为主；说明"仅显示超过门槛场次的车"；有盒子效率补充时才提它。"""
     boxed = any(r.has_box for r in rows)
-    tail = " ｜ 盒子效率为补充" if boxed else ""
+    scope = "近 30 天 >%d 场" % CAMP_TANKS_MIN_FIGHTS
     if style == "plain":
-        return "常用坦克（营地近 30 天%s）：" % (" | 附盒子效率" if boxed else "")
+        return "常用坦克（营地 %s%s）：" % (scope, " | 附盒子效率" if boxed else "")
+    tail = " ｜ 盒子效率为补充" if boxed else ""
     if style == "table":
-        return "常用坦克（营地近 30 天口径%s）" % tail
-    return "**常用坦克**（营地近 30 天口径%s）" % tail
+        return "常用坦克（营地 %s%s）" % (scope, tail)
+    return "**常用坦克**（营地 %s%s）" % (scope, tail)
 
 
 def _box_segment(row, style: str, as_column: bool = False) -> str:
@@ -206,7 +195,7 @@ def _index_qq_md(st: PlayerStats, camp=None) -> str:
         lines += ["", "🚗 **常用坦克**（战力 / 胜率 / 场均伤害 / 命中率）"]
         for t in st.tanks[:5]:
             lines.append(_tank_brief_line(t, bold_name=True))
-    lines += ["", _source_line(st.player, "qq_md")]
+    # （v0.3.5 删除）此处曾是"数据来源：<盒子查询页>"一行，用户要求去掉（回复已足够详细）
     return NL.join(lines)
 
 
@@ -234,7 +223,7 @@ def _index_plain(st: PlayerStats, camp=None) -> str:
             hit = (t.avg or {}).get("命中率", "-")
             lines.append("· %s（%s）%s | %s场 | 战力 %s | 场均伤害 %s | 命中率 %s" % (
                 t.name, t.vehicle_type, t.win_rate, t.battles, t.power, dmg, hit))
-    lines.append(_source_line(st.player, "plain"))
+    # （v0.3.5 删除）数据来源行
     return NL.join(lines)
 
 
@@ -267,7 +256,7 @@ def _index_md_table(st: PlayerStats, camp=None) -> str:
             hit = (t.avg or {}).get("命中率", "-")
             lines.append("| %s | %s | %s | %s | %s | %s | %s |" % (
                 _md_escape(t.name), t.vehicle_type, t.win_rate, t.battles, t.power, _md_escape(dmg), _md_escape(hit)))
-    lines += ["", _source_line(st.player, "table")]
+    # （v0.3.5 删除）数据来源行
     return NL.join(lines)
 
 
@@ -302,7 +291,7 @@ def _total_qq_md(ts: TotalStats) -> str:
         lines += ["", "🚗 **最近常用坦克**"]
         for t in ts.recent_tanks[:5]:
             lines.append("- %s：%s 场 ｜ %s ｜ 战力 **%s**" % (t.name, t.battles, t.win_rate, t.power))
-    lines += ["", _source_line(ts.player, "qq_md", total=True)]
+    # （v0.3.5 删除）数据来源行
     return NL.join(lines)
 
 
@@ -324,7 +313,7 @@ def _total_plain(ts: TotalStats) -> str:
         for t in ts.recent_tanks[:5]:
             parts.append("%s（%s场·%s·战力%s）" % (t.name, t.battles, t.win_rate, t.power))
         lines.append("最近常用坦克：" + " ".join(parts))
-    lines.append(_source_line(ts.player, "plain", total=True))
+    # （v0.3.5 删除）数据来源行
     return NL.join(lines)
 
 
@@ -353,7 +342,7 @@ def _total_md_table(ts: TotalStats) -> str:
         lines += ["", "### 最近常用坦克", "", "| 坦克 | 场次 | 胜率 | 战力 |", "| --- | --- | --- | --- |"]
         for t in ts.recent_tanks[:5]:
             lines.append("| %s | %s | %s | %s |" % (_md_escape(t.name), t.battles, t.win_rate, t.power))
-    lines += ["", _source_line(ts.player, "table", total=True)]
+    # （v0.3.5 删除）数据来源行
     return NL.join(lines)
 
 
@@ -520,36 +509,32 @@ def _camp_period_line(per: CampPeriod, style: str) -> str:
         _fmt_num(per.kd, 2, zero_is_dash=not has_data), rank)
 
 
-def _camp_avg_line(per: CampPeriod, style: str) -> str:
-    has_data = per.fights > 0
-    return "%s近 30 天场均：伤害 %s ｜ 击毁 %s ｜ 点亮 %s ｜ 经验 %s ｜ 命中率 %s ｜ 出战等级 %s" % (
-        _bullet(style),
-        _fmt_int(per.avgdmg) if has_data else "-",
-        _fmt_num(per.avgfrag, 2, zero_is_dash=not has_data),
-        _fmt_num(per.avgspot, 2, zero_is_dash=not has_data),
-        _fmt_int(per.avgexp) if has_data else "-",
-        _fmt_pct(per.hit_rate, 1, zero_is_dash=not has_data),
-        _fmt_num(per.avglevel, 1, zero_is_dash=not has_data))
+# （v0.3.5 删除）此前的「近 30 天场均：伤害/击毁/点亮/经验/命中率/出战等级」行：
+# 与回复开头的场均块重复，用户要求去掉。数据字段仍在 CampPeriod 中（未删数据），
+# 需要恢复时从 git 历史取回 `_camp_avg_line` 即可。
 
 
 def format_camp_brief(camp: CampPlayer, style: str = "qq_md") -> str:
-    """营地速览（挂在 /wot 回复末尾）：三时段 WN8/场次/胜率/排名 + 近 30 天场均。"""
+    """营地速览（挂在 /wot 回复末尾）：**近 7 天 / 近 30 天**两行。
+
+    用户要求（v0.3.5）：
+    - 删掉「近 30 天场均：伤害/击毁/点亮/经验/命中率/出战等级」——与回复开头的场均块重复；
+    - 删掉「生涯」时段——代表意义不大（且开头已有生涯口径的盒子数据）。
+    因此只保留近 7 天与近 30 天两行（WN8/场次/胜率/K/D/全服排名）。
+    """
     bold = (lambda s: "**%s**" % s) if style != "plain" else (lambda s: s)
     if style == "plain":
         lines = ["【坦克营地】%s（官方 APP 数据）" % _md_text(camp.nickname)]
     else:
         lines = ["🏕 %s ｜ %s数据" % (bold(_md_text(camp.nickname)), bold("坦克营地"))]
     shown = False
-    for key in ("day_7", "day_30", "all"):
+    for key in ("day_7", "day_30"):
         per = camp.period(key)
         if per:
             lines.append(_camp_period_line(per, style))
             shown = True
     if not shown:
         return ""
-    d30 = camp.day_30
-    if d30:
-        lines.append(_camp_avg_line(d30, style))
     return NL.join(lines)
 
 

@@ -47,10 +47,11 @@
 | `REPLY_STYLE` | `auto` | `auto`（QQ 官方→qq_md，其余→plain）/ `qq_md` / `plain` / `table` |
 | `CAMP_ENABLED` | `True` | `/wot <昵称>` 是否附带营地数据（三时段 + 常用坦克表） |
 | `CAMP_SCAN_DAYS` | 30 | 「常用坦克」的时间窗（天）：这期间打过的车都会列出 |
-| `CAMP_TANKS_TOP` | 0 | 常用坦克展示条数：**0 = 全部**（想缩短回复可改成 10~12） |
+| `CAMP_TANKS_TOP` | | 0 | 常用坦克展示条数：**0 = 全部**（想缩短回复可改成 10~12） |
 | `CAMP_TANKS_SCAN` | 60 | 最多为多少辆车查近 30 天单车数据（请求数上限） |
 | `CAMP_BATTLE_PAGE_SIZE` / `CAMP_BATTLE_BATCH` | 100 / 3 | 逐场翻页的单页条数 / 一次并发翻几页（用于枚举车辆） |
 | `CAMP_CACHE_TTL` | 0 | 营地查询数据进程内缓存秒数（0=不缓存） |
+| `CAMP_TANKS_MIN_FIGHTS` | 10 | 常用坦克门槛：只展示近 30 天**超过**该场次的车 |
 | `WGID_CACHE_TTL` | 21600 | 昵称→wgid 进程内缓存秒数 |
 | `AI_REVIEW_ENABLED` | `True` | 是否追加 AI 点评（调用 `astrbot_plugin_aisearch`；单次 20~60s） |
 | `AI_REVIEW_PLUGIN` | `astrbot_plugin_aisearch` | 提供对话能力的插件名 |
@@ -66,7 +67,7 @@
 开发与维护约定见 [AGENTS.md](AGENTS.md)；解析回归测试基于 tests/fixtures/ 的真实站点/接口快照。
 
 ```bash
-python -m unittest discover -s tests -t .        # 单元测试（186 项，不联网）
+python -m unittest discover -s tests -t .        # 单元测试（193 项，不联网）
 python research/verify_integration.py loy1234    # 端到端实网验证（可选 --fixture-box 离线）
 python research/verify_command_handler.py        # 指令层验证（含桩驱动降级分支）
 ```

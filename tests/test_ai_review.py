@@ -89,14 +89,21 @@ class TestPrompt(unittest.TestCase):
         """优先选胜率低、WN8 低、场次够多的车（而不是场次最多的）。"""
         self.assertIn("胜率低 + WN8 低 + 场次够多", AI_REVIEW_PROMPT)
         self.assertIn("不要**挑场次最多", AI_REVIEW_PROMPT)
-        self.assertIn("优先选场次 ≥10 的", AI_REVIEW_PROMPT)
-        self.assertIn("放宽到 ≥5 场", AI_REVIEW_PROMPT)
+        self.assertIn("只有近 30 天打过 10 场以上的车", AI_REVIEW_PROMPT)
+        self.assertIn("不足 5 辆", AI_REVIEW_PROMPT)
 
     def test_embeds_researched_frameworks(self):
         """联网调研后补充的权威口径：WTR 五指标（按角色）+ 数据诊断对照表 + 三环量级。"""
         for key in ("弹夹", "高机动", "重甲", "生存率",
                     "伤害够但胜率低", "伤害低且胜率低", "胜率高但 WN8 低", "三环线"):
             self.assertIn(key, AI_REVIEW_PROMPT)
+
+    def test_data_scope_is_two_periods_only(self):
+        """v0.3.5：数据里不再有生涯口径，趋势只能靠近 7 天 vs 近 30 天。"""
+        self.assertIn("近 7 天 / 近 30 天", AI_REVIEW_PROMPT)
+        self.assertIn("数据里没有生涯口径", AI_REVIEW_PROMPT)
+        self.assertIn("近 7 天与近 30 天相比是进步还是停滞", AI_REVIEW_PROMPT)
+        self.assertIn("打过 10 场以上", AI_REVIEW_PROMPT)
 
     def test_prioritises_by_repeated_mistakes(self):
         """场次越多、胜率越低的车优先点评（错误重复次数多，改起来收益最大）。"""

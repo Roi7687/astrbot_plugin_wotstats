@@ -55,6 +55,7 @@ CAMP_BATTLE_PAGE_SIZE = 100    # 逐场单页条数（越小越快：100 条 ≈
 CAMP_BATTLE_BATCH = 3          # 一次并发翻几页（减小总体等待，营地侧不限流）
 CAMP_TANKS_SCAN = 60           # 最多为多少辆车查近 30 天单车数据（超出部分丢弃）
 CAMP_TANKS_TOP = 0             # 展示条数：0 = 全部（用户要求显示 30 天内全部常用坦克）
+CAMP_TANKS_MIN_FIGHTS = 10     # 「常用」门槛：只展示近 30 天**超过**该场次的车（用户要求，v0.3.5）
 CAMP_CACHE_TTL = 0         # 进程内缓存秒数（0=不缓存，遵守"运行时零缓存"约定）
 WGID_CACHE_TTL = 21600     # 昵称→wgid 的进程内缓存秒数（6 小时；只是 ID 映射，非战绩数据）
 

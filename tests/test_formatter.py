@@ -63,10 +63,14 @@ def make_camp():
             "all": CampPeriod(key="all", fights=30536, win=17126, lose=12911, draw=499,
                               wn8=2226.36, win_rate=56.08, kd=1.43, rank=10099, population=384874),
         },
-        tanks_30d=[CampTank(tank_id="37649", name="UDES 15/16", tier=10, type="MT", fights=38,
-                            wn8=3202.8, win_rate=52.6, avgdmg=3704.0, avgdmgasst=1006.0, kd=1.0),
-                   CampTank(tank_id="2977", name='"犀牛"', tier=10, type="heavyTank", fights=4,
-                            wn8=3670.6, win_rate=25.0, avgdmg=3831.25, avgdmgasst=120.0, kd=1.0)],
+        tanks_30d=[  # 均取自 2026-10-16 实测，按近 30 天场次降序
+            CampTank(tank_id="36673", name="WZ132-1", tier=10, type="lightTank", fights=56,
+                     wn8=2702.0, win_rate=53.6, avgdmg=2050.0, avgdmgasst=900.0, kd=1.0),
+            CampTank(tank_id="37649", name="UDES 15/16", tier=10, type="MT", fights=38,
+                     wn8=3202.8, win_rate=52.6, avgdmg=3704.0, avgdmgasst=1006.0, kd=1.0),
+            # 4 场 < 门槛（CAMP_TANKS_MIN_FIGHTS=10）→ 不应出现在常用坦克表里（v0.3.5 过滤规则）
+            CampTank(tank_id="2977", name='"犀牛"', tier=10, type="heavyTank", fights=4,
+                     wn8=3670.6, win_rate=25.0, avgdmg=3831.25, avgdmgasst=120.0, kd=1.0)],
     )
 
 
@@ -82,10 +86,18 @@ class TestIndexStyles(unittest.TestCase):
         self.assertIn("场均伤害 4196", text)
         self.assertIn("命中率 81%", text)
 
-    def test_qq_md_source_link_clickable(self):
-        text = format_index_reply(self.st, "qq_md")
-        self.assertNotIn("仅供参考", text)
-        self.assertIn("数据来源：[" + INDEX_URL + "](" + INDEX_URL + ")", text)
+    def test_source_line_removed(self):
+        """v0.3.5：用户要求删除结尾的「数据来源：<盒子查询页链接>」（回复已足够详细）。"""
+        for style in ("qq_md", "plain", "table"):
+            text = format_index_reply(self.st, style)
+            self.assertNotIn("数据来源", text, style)
+            self.assertNotIn(INDEX_URL, text, style)
+            self.assertNotIn("wotbox.ouj.com", text, style)
+        ts = make_total_stats()
+        for style in ("qq_md", "plain", "table"):
+            text = format_total_reply(ts, style)
+            self.assertNotIn("数据来源", text, style)
+            self.assertNotIn(TOTAL_URL, text, style)
 
     def test_deleted_sections_not_rendered(self):
         """用户要求删除的三段（各车型战斗力 / 最近对局 / 盒子评价）不得再出现。"""
@@ -99,8 +111,8 @@ class TestIndexStyles(unittest.TestCase):
         self.assertNotIn("**", text)
         self.assertNotIn("| --- |", text)
         self.assertIn("胜率 57%", text)
-        self.assertIn("数据来源：" + INDEX_URL, text)
         self.assertIn("· 庇护者（重坦）", text)
+        self.assertNotIn("数据来源", text)          # v0.3.5 已删除来源行
 
     def test_table_style(self):
         text = format_index_reply(self.st, "table")
@@ -122,10 +134,15 @@ class TestIndexWithCamp(unittest.TestCase):
         self.assertIn("常用坦克", text)
         self.assertIn("营地WN8 **3,203**", text)
         self.assertIn("**UDES 15/16**", text)
-        self.assertIn('犀牛', text)
-        self.assertNotIn('"犀牛"', text)             # 引号被去掉
-        self.assertNotIn("盒子效率", text)            # 无补充数据 → 不显示该字段
+        self.assertIn("营地 近 30 天 >10 场", text)     # v0.3.5：表头写明"常玩"门槛
+        self.assertNotIn("盒子效率", text)             # 无补充数据 → 不显示该字段
         self.assertNotIn("盒子效率 -", text)
+
+    def test_tanks_below_fight_threshold_are_filtered(self):
+        """v0.3.5：30 天只打了几场的车不算"常用"，不进表（犀牛只有 4 场）。"""
+        text = format_index_reply(self.st, "qq_md", self.camp)
+        self.assertNotIn("犀牛", text)
+        self.assertNotIn('"犀牛"', text)              # 引号去掉了，但整辆车的行都不该在
 
     def test_box_power_appended_only_for_matched_rows(self):
         """有盒子数据时：**只给匹配上的行**追加"盒子效率"，其余行不显示。"""
@@ -146,11 +163,13 @@ class TestIndexWithCamp(unittest.TestCase):
     def test_plain_and_table(self):
         plain = format_index_reply(self.st, "plain", self.camp)
         self.assertNotIn("**", plain)
-        self.assertIn("常用坦克（营地近 30 天）：", plain)
+        self.assertIn("常用坦克（营地 近 30 天 >10 场）：", plain)
         table = format_index_reply(self.st, "table", self.camp)
         self.assertIn("| 坦克 | 等级 | 营地WN8 | 近30天场次 | 30天胜率 | 场均伤害 |", table)
+        self.assertIn("| WZ132-1 | 10 | 2,702 | 56 | 53.6% | 2,050 |", table)
         self.assertIn("| UDES 15/16 | 10 | 3,203 | 38 | 52.6% | 3,704 |", table)
-        self.assertNotIn("盒子效率", table)            # 无补充 → 不加列
+        self.assertNotIn("犀牛", table)                 # 4 场 < 门槛 → 被过滤
+        self.assertNotIn("盒子效率", table)              # 无补充 → 不加列
 
     def test_table_adds_box_column_only_when_available(self):
         st = make_index_stats()
@@ -158,7 +177,7 @@ class TestIndexWithCamp(unittest.TestCase):
         table = format_index_reply(st, "table", self.camp)
         self.assertIn("| 坦克 | 等级 | 营地WN8 | 近30天场次 | 30天胜率 | 场均伤害 | 盒子效率 |", table)
         self.assertIn("| UDES 15/16 | 10 | 3,203 | 38 | 52.6% | 3,704 | 1516 |", table)
-        self.assertIn("| 犀牛 | 10 | 3,671 | 4 | 25.0% | 3,831 | - |", table)
+        self.assertIn("| WZ132-1 | 10 | 2,702 | 56 | 53.6% | 2,050 | - |", table)
 
     def test_camp_without_tanks_falls_back_to_box_view(self):
         """营地只有时段数据、没有单车数据时，仍展示盒子的常用坦克（不出现空表）。"""
@@ -207,8 +226,8 @@ class TestIndexWithCamp(unittest.TestCase):
         self.assertLess(len(text), 1500)
 
     def test_unknown_tier_wording(self):
-        camp = CampPlayer(nickname="x", periods={"all": CampPeriod(key="all", fights=1, wn8=100)},
-                          tanks_30d=[CampTank(name="T", tier=0, fights=1, wn8=100)])
+        camp = CampPlayer(nickname="x", periods={"day_30": CampPeriod(key="day_30", fights=12, wn8=100)},
+                          tanks_30d=[CampTank(name="T", tier=0, fights=12, wn8=100)])
         text = format_index_reply(self.st, "qq_md", camp)
         self.assertIn("等级未知", text)
         self.assertNotIn("（- 级）", text)
@@ -224,14 +243,14 @@ class TestTotalStyles(unittest.TestCase):
         self.assertIn("**53%**", text)
         self.assertIn("已入伍4984天", text)
         self.assertNotIn("| --- |", text)
-        self.assertIn("数据来源：[" + TOTAL_URL + "](" + TOTAL_URL + ")", text)
+        self.assertNotIn("数据来源", text)          # v0.3.5 已删除来源行
         self.assertNotIn("仅供参考", text)
 
     def test_plain(self):
         text = format_total_reply(self.ts, "plain")
         self.assertNotIn("**", text)
         self.assertIn("总胜率 53%", text)
-        self.assertIn("数据来源：" + TOTAL_URL, text)
+        self.assertNotIn("数据来源", text)
 
     def test_table(self):
         text = format_total_reply(self.ts, "table")
@@ -292,14 +311,15 @@ class TestThreeRing(unittest.TestCase):
 
 
 class TestCampBlock(unittest.TestCase):
-    """盒子不可用时的营地正文（常用坦克表 + 三时段速览）。"""
+    """盒子不可用时的营地正文（常用坦克表 + 近 7 天/近 30 天速览）。"""
 
     def test_includes_tank_table_even_without_box(self):
         text = format_camp_block(make_camp(), "qq_md")
         self.assertIn("常用坦克", text)                 # 表必须在（v0.3.2 修的真实缺陷）
         self.assertIn("营地WN8 **3,203**", text)
         self.assertIn("🏕 **loy1234** ｜ **坦克营地**数据", text)
-        self.assertIn("近 30 天场均", text)
+        self.assertNotIn("近 30 天场均", text)           # v0.3.5 删除（与开头场均重复）
+        self.assertNotIn("生涯", text)                  # v0.3.5 删除（代表意义不大）
         self.assertNotIn("盒子效率", text)              # 无盒子数据 → 不出现该字段
         self.assertNotIn("| --- |", text)
         self.assertFalse(text.startswith("\n"))         # 正文不以空行开头
@@ -312,20 +332,20 @@ class TestCampBlock(unittest.TestCase):
     def test_plain_style(self):
         text = format_camp_block(make_camp(), "plain")
         self.assertNotIn("**", text)
-        self.assertIn("常用坦克（营地近 30 天）：", text)
+        self.assertIn("常用坦克（营地 近 30 天 >10 场）：", text)
 
     def test_empty_when_no_camp(self):
         self.assertEqual(format_camp_block(None), "")
 
     def test_only_brief_when_no_tanks(self):
-        camp = CampPlayer(nickname="x", periods={"all": CampPeriod(key="all", fights=5, wn8=1000)})
+        camp = CampPlayer(nickname="x", periods={"day_30": CampPeriod(key="day_30", fights=5, wn8=1000)})
         text = format_camp_block(camp, "qq_md")
         self.assertIn("🏕 **x**", text)
         self.assertNotIn("常用坦克", text)
 
 
 class TestCampBrief(unittest.TestCase):
-    """营地速览（挂在 /wot 回复末尾）：三时段 + 近 30 天场均。"""
+    """营地速览（挂在 /wot 回复末尾）：只保留近 7 天 / 近 30 天两行。"""
 
     def test_qq_md(self):
         text = format_camp_brief(make_camp(), "qq_md")
@@ -333,9 +353,11 @@ class TestCampBrief(unittest.TestCase):
         self.assertIn("近 7 天", text)
         self.assertIn("**3,078**", text)
         self.assertIn("全服第 1,021 名（129,540 人）", text)
-        self.assertIn("近 30 天场均", text)          # 由原"营地详细报告"移入速览
+        self.assertIn("近 30 天", text)
+        self.assertNotIn("近 30 天场均", text)          # v0.3.5 删除（与开头重复）
+        self.assertNotIn("生涯", text)                  # v0.3.5 删除
         self.assertNotIn("逐场", text)
-        self.assertEqual(text.count("\n"), 4)        # 标题 + 3 时段 + 场均
+        self.assertEqual(text.count("\n"), 2)           # 标题 + 近7天 + 近30天 = 3 行
 
     def test_plain(self):
         text = format_camp_brief(make_camp(), "plain")
@@ -352,7 +374,8 @@ class TestCampBrief(unittest.TestCase):
             key="day_30", fights=3, wn8=500, win_rate=0.0, kd=0.0, hit_rate=0.0)})
         text = format_camp_brief(camp, "qq_md")
         self.assertIn("胜率 0.0%", text)
-        self.assertIn("命中率 0.0%", text)
+        self.assertIn("K/D 0.00", text)
+        self.assertNotIn("近 30 天场均", text)      # v0.3.5 该行已删除
 
     def test_no_data_period_is_skipped(self):
         """fights=0 的时段不算数据（CampPlayer.period 会过滤）→ 速览整体为空。"""
@@ -365,13 +388,13 @@ class TestCampBrief(unittest.TestCase):
             nickname="x",
             periods={"day_7": CampPeriod(key="day_7", fights=3, wn8=500.0, win_rate=0.0, kd=0.0,
                                          rank=100, population=1000)},
-            tanks_30d=[CampTank(name="T", tier=10, fights=3, wn8=0.0, win_rate=0.0, avgdmg=0.0)],
+            tanks_30d=[CampTank(name="T", tier=10, fights=12, wn8=0.0, win_rate=0.0, avgdmg=0.0)],
         )
         brief = format_camp_brief(camp, "qq_md")
         self.assertIn("胜率 0.0%", brief)
         self.assertNotIn("-%", brief)
         table = format_index_reply(make_index_stats(), "table", camp)
-        self.assertIn("| T | 10 | - | 3 | 0.0% | - |", table)   # 无盒子补充 → 没有盒子列
+        self.assertIn("| T | 10 | - | 12 | 0.0% | - |", table)   # 无盒子补充 → 没有盒子列
 
 
 if __name__ == "__main__":
